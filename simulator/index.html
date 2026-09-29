@@ -178,7 +178,7 @@ input[type=password]{font-family:inherit}
 
 <script>
 const $ = id => document.getElementById(id);
-const S = { preset: localStorage.getItem('sb_preset')||'gtm-switchers', presets:[], key: sessionStorage.getItem('sb_key')||'', voice:true, engine: localStorage.getItem('sb_engine')||'cloudflare', cfUrl: localStorage.getItem('sb_cfurl')||'https://alexa-signal-voice.mayorjoshua51.workers.dev', enabled:{} };
+const S = { preset: localStorage.getItem('sb_preset')||'gtm-switchers', presets:[], key: sessionStorage.getItem('sb_key')||'', voice:true, engine: localStorage.getItem('sb_engine')||'browser', cfUrl: localStorage.getItem('sb_cfurl')||'https://alexa-signal-voice.mayorjoshua51.workers.dev', enabled:{} };
 const H = () => ({'Content-Type':'application/json', ...(S.key?{'x-sygnal-key':S.key}:{})});
 const toast = m => { const t=$('toast'); t.textContent=m; t.style.display='block'; setTimeout(()=>t.style.display='none',2600); };
 const domain = u => { try{return new URL(u).hostname.replace(/^www\./,'')}catch{return ''} };

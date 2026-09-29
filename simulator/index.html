@@ -223,7 +223,11 @@ async function speak(text){
   vlog('tts:start', 'speak()', { engine: S.engine, chars: text.length });
   if(S.engine==='cloudflare'){
     try{ await speakCf(text); return; }
-    catch(e){ vlog('tts:fallback', 'falling back to browser voice', { err: String(e).slice(0,120) }); toast('Human voice failed — basic voice instead'); }
+    catch(e){
+      const m = String(e).slice(0,200);
+      vlog('tts:fallback', 'falling back to browser voice', { err: m });
+      toast(/allocation|neurons|quota/i.test(m) ? 'Human voices refilled tomorrow — basic voice for now' : 'Human voice failed — basic voice instead');
+    }
   }
   try{ speakBrowser(text); }catch{}
 }
@@ -492,7 +496,12 @@ async function startRecorderListen(){
         const t0 = performance.now();
         const r = await fetch(url, { method:'POST', headers:{'Content-Type': blob.type || 'audio/webm'}, body: blob });
         const j = await r.json();
-        if (!r.ok) { vlog('stt:err', 'transcribe rejected', { status: r.status, err: (j.detail || j.error || '').slice(0,200) }); listenNote('Transcription hiccup — tap again or type below.'); return; }
+        if (!r.ok) {
+          const d = (j.detail || j.error || '');
+          vlog('stt:err', 'transcribe rejected', { status: r.status, err: d.slice(0,200) });
+          listenNote(/allocation|neurons|quota/i.test(d) ? 'Voice quota refilled tomorrow — tap 🎤 Tap to talk (built-in) or type below for now.' : 'Transcription hiccup — tap again or type below.');
+          return;
+        }
         vlog('stt:whisper', 'transcription result', { text: j.text || '', ms: Math.round(performance.now()-t0) });
         if (j.text) { listenNote('Heard: “' + j.text + '”'); handleVoiceCommand(j.text); }
         else listenNote('Did not catch that — try again.');

@@ -124,6 +124,11 @@ input[type=password]{font-family:inherit}
           <input id="typeBox" placeholder='No mic? Type here — e.g. “give me my brief”' style="flex:1;background:#fbf9f3;border:1px solid var(--line);border-radius:10px;padding:9px;font-size:13px" />
           <button class="btn primary" id="sendBtn">Send</button>
         </div>
+        <div style="max-width:640px;margin:8px auto 0;display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn" data-say="give me my brief">“Give me my brief”</button>
+          <button class="btn" data-say="tell me more on number 1">“Tell me more on 1”</button>
+          <button class="btn" data-say="push number 1 to Slack">“Push 1”</button>
+        </div>
         <div style="max-width:640px;margin:8px auto 0">
           <input id="cfUrl" placeholder="Voice server address (already filled — only change if asked)" style="width:100%;background:#fbf9f3;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px" />
         </div>
@@ -311,7 +316,17 @@ $('convoBtn').onclick = () => {
 const listenNote = m => { $('listenState').textContent = m; };
 const NUMW = { one:1, two:2, three:3, four:4, five:5, first:1, second:2, third:3, fourth:4, fifth:5 };
 
-function parseCommand(t){
+function normalizeHeard(t){
+  return t.toLowerCase()
+    .replace(/\balexa[,\s]*/g, '')
+    .replace(/\b(beef|grief|leaf|belief|beliefs|breathe|breeze|briefing|breef|greef)\b/g, 'brief')
+    .replace(/\b(signals?|signel|single)\b/g, 'signal')
+    .replace(/\b(slak|slakc)\b/g, 'slack')
+    .trim();
+}
+
+function parseCommand(raw){
+  const t = normalizeHeard(raw);
   const s = t.toLowerCase();
   const numMatch = s.match(/(\d+)/) || Object.keys(NUMW).find(w => s.includes(w));
   const num = numMatch ? (typeof numMatch === 'string' ? NUMW[numMatch] : parseInt(numMatch[1],10)) : null;
@@ -322,6 +337,10 @@ function parseCommand(t){
   if (/\b(plumber|electrician|cleaner|homeowner|repair|nextdoor)\b/.test(s)) return { intent:'brief', preset:'home-services' };
   if (/\b(bill|soc2|bedrock|self-host|nim|inference|openai cost)\b/.test(s)) return { intent:'brief', preset:'ai-cost' };
   if (/\b(brief|signal|update|morning|report|clay|intent|revops|gtm|watchlist|what's new)\b/.test(s)) return { intent:'brief', preset: /ai-cost|cost|bill/.test(s) ? 'ai-cost' : /home|plumb/.test(s) ? 'home-services' : null };
+  // Forgiving catch-all: "give/get/show me ..." is almost always a brief request,
+  // even when the keyword itself was misheard ("give me my beef" == brief)
+  if (/\b(give|get|show|read|run|start|open)\b/.test(s)) return { intent:'brief', preset: /ai-cost|cost|bill/.test(s) ? 'ai-cost' : /home|plumb/.test(s) ? 'home-services' : null };
+  if (/\b(my|mine)\b/.test(s) && /\b(brief|signal|update|report|stuff|things)\b/.test(s)) return { intent:'brief', preset: null };
   return { intent:'help' };
 }
 
@@ -357,7 +376,7 @@ async function handleVoiceCommand(raw){
     await ask(raw);
     return afterAnswer();
   }
-  await say("I can brief you, dive into any signal by number, or push one to Slack. Try: give me my brief.");
+  await say(`I heard "${raw}" — I didn't quite catch that. Say "brief" for your signals, "tell me more on 1" for detail, or "push 1" to send it to Slack.`);
   return afterAnswer();
 }
 async function say(text){
@@ -383,14 +402,19 @@ function startBrowserListen(){
   if (recActive) return;
   const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
   rec = new Ctor();
-  rec.lang = 'en-US'; rec.interimResults = false; rec.maxAlternatives = 1;
+  rec.lang = 'en-US'; rec.interimResults = false; rec.maxAlternatives = 3;
   recActive = true;
   listenNote('🎤 Listening… speak now (tap Stop to cancel)');
   $('talkBtn').textContent = '⏹ Listening…';
   rec.onresult = e => {
-    const text = e.results[0][0].transcript;
-    recActive = false; $('talkBtn').textContent = '🎤 Tap to talk'; listenNote('Heard: “' + text + '” — thinking…');
-    handleVoiceCommand(text);
+    // Check every alternative — the top guess often mangles "brief" as "beef"
+    const alts = [];
+    for (let i = 0; i < e.results[0].length; i++) alts.push(e.results[0][i].transcript);
+    const heard = alts[0];
+    const best = alts.find(t => parseCommand(t).intent !== 'help') || heard;
+    recActive = false; try { rec.stop(); } catch {}
+    $('talkBtn').textContent = '🎤 Tap to talk'; listenNote('Heard: “' + best + '” — thinking…');
+    handleVoiceCommand(best);
   };
   rec.onerror = e => {
     recActive = false; $('talkBtn').textContent = '🎤 Tap to talk';
@@ -447,6 +471,7 @@ $('sendBtn').onclick = () => {
   handleVoiceCommand(t);
 };
 $('typeBox').onkeydown = e => { if (e.key === 'Enter') $('sendBtn').click(); };
+document.querySelectorAll('[data-say]').forEach(b=>b.onclick=()=>handleVoiceCommand(b.dataset.say));
 
 /* brief = voice-first; heard = what the user actually said (voice loop) */
 async function ask(heard){

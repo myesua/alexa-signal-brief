@@ -1,0 +1,72 @@
+[
+  {
+    "signal_id": "sig-clay-001",
+    "score": 8.6,
+    "title": "“Clay webhook delayed 2h — we miss fresh buying signals”",
+    "source_label": "Clay Community",
+    "source_url": "https://community.clay.com/s/search?query=webhook%20delayed%20missing%20alerts",
+    "thread_url": "https://community.clay.com/s/question/webhook-delayed-missing-realtime-alerts",
+    "posted_at": "2026-09-12T10:00:00Z",
+    "intent_type": "switching",
+    "author": "RevOps lead, B2B SaaS ~80 emp",
+    "raw_text": "Our Clay webhook is delayed by hours so we miss fresh buying signals. Looking for a real-time alternative that pushes to Slack + HubSpot the second a prospect posts a problem.",
+    "direct_evidence": ["“webhook is delayed by hours”", "“miss fresh buying signals”", "“real-time alternative that pushes to Slack + HubSpot”"],
+    "suggested_outreach": "Saw your Clay webhook delay post — Sygnal pushes problem-level signals to Slack in real time. Want a 10-min look on your exact keywords?"
+  },
+  {
+    "signal_id": "sig-zoom-002",
+    "score": 8.1,
+    "title": "“ZoomInfo intent is stale by days — need real-time problem signals”",
+    "source_label": "r/sales",
+    "source_url": "https://www.reddit.com/r/sales/search.json?q=ZoomInfo%20intent%20stale&restrict_sr=1&sort=new",
+    "thread_url": "https://www.reddit.com/r/sales/comments/zoominfo-intent-stale-days/",
+    "posted_at": "2026-09-11T15:00:00Z",
+    "intent_type": "switching",
+    "author": "SDR Manager, B2B SaaS ~120 emp",
+    "raw_text": "ZoomInfo intent is stale by days. Need real-time problem-level signals with a webhook to Slack when someone actually asks for help.",
+    "direct_evidence": ["“stale by days”", "“real-time problem-level signals”", "“webhook to Slack when someone asks for help”"],
+    "suggested_outreach": "Noticed the stale-intent pain — Sygnal scores live help-requests 0-10 and webhooks them to Slack. Open to a sample on your ICP?"
+  },
+  {
+    "signal_id": "sig-crm-003",
+    "score": 7.8,
+    "title": "“How do you route fresh signals to HubSpot without Zapier breaking?”",
+    "source_label": "Modern Sales Pros",
+    "source_url": "https://themodernsalespros.com/?s=buying+intent+sales+alerts+HubSpot",
+    "thread_url": "https://themodernsalespros.com/discussion/route-fresh-signals-hubspot-zapier-breaking",
+    "posted_at": "2026-09-11T09:00:00Z",
+    "intent_type": "workflow_pain",
+    "author": "GTM Engineer, B2B SaaS ~45 emp",
+    "raw_text": "How do you get fresh buyer signals into HubSpot without Zapier breaking? We keep missing follow-ups when alerts arrive late.",
+    "direct_evidence": ["“without Zapier breaking”", "“missing follow-ups”", "“alerts arrive late”"],
+    "suggested_outreach": "Saw the HubSpot routing thread — Sygnal delivers webhook payloads shaped for HubSpot with retry. Want the payload spec?"
+  },
+  {
+    "signal_id": "sig-revops-004",
+    "score": 7.5,
+    "title": "“Missing buying signals that never hit our CRM”",
+    "source_label": "RevOps Co-op",
+    "source_url": "https://www.google.com/search?q=site%3Arevopscoop.com+buying+intent+webhook+CRM+missing",
+    "thread_url": "https://www.google.com/search?q=site%3Arevopscoop.com+%22missing+buying+signals%22+CRM",
+    "posted_at": "2026-09-10T14:00:00Z",
+    "intent_type": "workflow_pain",
+    "author": "RevOps, B2B SaaS ~60 emp",
+    "raw_text": "We keep missing buying signals that never hit our CRM. Need real-time capture from public problem posts with urgency scoring.",
+    "direct_evidence": ["“missing buying signals”", "“never hit our CRM”", "“urgency scoring”"],
+    "suggested_outreach": "Your CRM-gap post is exactly what Sygnal fixes — live capture + 0-10 urgency. Can I send 3 sample signals?"
+  },
+  {
+    "signal_id": "sig-x-005",
+    "score": 7.2,
+    "title": "“Looking for Clay alternative with real-time Slack alerts”",
+    "source_label": "X / Twitter",
+    "source_url": "https://x.com/search?q=%22buying%20intent%22%20Clay%20webhook&src=typed_query&f=live",
+    "thread_url": "https://x.com/search?q=%22Clay%20alternative%22%20real-time%20Slack%20alerts&f=live",
+    "posted_at": "2026-09-09T11:00:00Z",
+    "intent_type": "switching",
+    "author": "Founder, B2B SaaS ~25 emp",
+    "raw_text": "Looking for a Clay alternative with real-time Slack alerts when prospects describe problems. Stale database intent isn't cutting it.",
+    "direct_evidence": ["“Clay alternative”", "“real-time Slack alerts”", "“Stale database intent”"],
+    "suggested_outreach": "Building exactly that — real-time problem-post alerts to Slack. Want me to watch your 5 keywords this week?"
+  }
+]

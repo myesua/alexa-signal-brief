@@ -1,0 +1,44 @@
+[
+  {
+    "signal_id": "home-001",
+    "score": 9.1,
+    "title": "“Need emergency plumber tonight — basement leaking”",
+    "source_label": "r/HomeImprovement",
+    "source_url": "https://www.reddit.com/r/HomeImprovement/search.json?q=need+emergency+plumber&restrict_sr=1&sort=new",
+    "thread_url": "https://www.reddit.com/r/HomeImprovement/comments/need-emergency-plumber-basement/",
+    "posted_at": "2026-09-12T19:00:00Z",
+    "intent_type": "urgent_need",
+    "author": "Homeowner, Austin TX",
+    "raw_text": "Need an emergency plumber tonight, basement is leaking fast. Who is available same-day? Please drop quotes.",
+    "direct_evidence": ["“Need an emergency plumber tonight”", "“basement is leaking”", "“drop quotes”"],
+    "suggested_outreach": "We have 3 vetted plumbers with same-day slots in Austin. Want quotes in the next hour?"
+  },
+  {
+    "signal_id": "home-002",
+    "score": 8.4,
+    "title": "“Recommend a good electrician? Outlets dead after storm”",
+    "source_label": "r/HomeImprovement",
+    "source_url": "https://www.reddit.com/r/HomeImprovement/search.json?q=recommend+electrician+outlets&restrict_sr=1&sort=new",
+    "thread_url": "https://www.reddit.com/r/HomeImprovement/comments/recommend-electrician-outlets-dead/",
+    "posted_at": "2026-09-11T18:00:00Z",
+    "intent_type": "urgent_need",
+    "author": "Homeowner, Miami FL",
+    "raw_text": "Recommend a good electrician? Half my outlets are dead after the storm. Need someone licensed this week.",
+    "direct_evidence": ["“Recommend a good electrician”", "“outlets are dead”", "“licensed this week”"],
+    "suggested_outreach": "2 licensed electricians cover Miami with this-week slots. Want me to book an estimate?"
+  },
+  {
+    "signal_id": "home-003",
+    "score": 7.9,
+    "title": "“Looking for weekly cleaner — quotes needed”",
+    "source_label": "Nextdoor",
+    "source_url": "https://nextdoor.com/search/?query=looking+for+cleaner+quotes",
+    "thread_url": "https://nextdoor.com/p/looking-weekly-cleaner-quotes-needed/",
+    "posted_at": "2026-09-10T12:00:00Z",
+    "intent_type": "hiring",
+    "author": "Homeowner, Denver CO",
+    "raw_text": "Looking for a weekly cleaner, 3bd house. Please send quotes and availability. References required.",
+    "direct_evidence": ["“Looking for a weekly cleaner”", "“send quotes”", "“References required”"],
+    "suggested_outreach": "We vet cleaners with references + background checks. Want 3 quotes for weekly service?"
+  }
+]

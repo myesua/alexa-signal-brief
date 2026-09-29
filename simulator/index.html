@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Signal Brief · Alexa+</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<style>
+/* Claude paper + Apple system: warm, restrained, single clay accent */
+:root{--bg:#f4f0e6;--ink:#1c1a17;--mut:#6f6a5f;--line:#e2dccb;--card:#ffffff;--accent:#b3542e;--accent-ink:#ffffff;--good:#2e7d4f;--warn:#8a6100}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display",Inter,"Helvetica Neue",sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;-webkit-font-smoothing:antialiased}
+a{color:var(--accent)}
+.shell{max-width:1180px;margin:0 auto;padding:20px 18px 70px}
+/* top bar: quiet white, hairline border like Apple nav */
+.bar{position:sticky;top:12px;z-index:20;display:flex;align-items:center;gap:12px;padding:11px 14px;margin:0 -2px 16px;border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,.86);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.echo{width:36px;height:36px;border-radius:50%;background:var(--ink);display:grid;place-items:center;flex:none}
+.echo>span{width:26px;height:26px;border-radius:50%;background:var(--accent);display:grid;place-items:center;font-size:13px;color:#fff}
+.echo.live{outline:2px solid var(--accent);outline-offset:2px}
+.title{line-height:1.2}.title b{font-size:15px;letter-spacing:-.01em;font-weight:600}.title small{display:block;color:var(--mut);font-size:12px}
+.spacer{flex:1}
+.pill{font-size:11px;font-weight:600;padding:5px 10px;border-radius:99px;border:1px solid var(--line);color:var(--mut);background:#fbf9f3}
+.pill.live{color:var(--good);border-color:var(--good)}.pill.demo{color:var(--warn);border-color:var(--warn)}
+.btn{appearance:none;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:12px;padding:9px 13px;font-size:13px;font-weight:600;cursor:pointer}
+.btn:active{transform:scale(.98)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+/* layout */
+.layout{display:grid;grid-template-columns:300px 1fr 300px;gap:14px}
+@media(max-width:1020px){.layout{grid-template-columns:1fr}}
+.panel{border:1px solid var(--line);border-radius:18px;background:var(--card);padding:16px;box-shadow:0 1px 2px rgba(28,26,23,.05)}
+.panel h2{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);margin:0 0 10px;font-weight:600}
+/* skill rows: plain list, selected gets clay left rule */
+.skill{display:flex;gap:10px;align-items:center;width:100%;text-align:left;border:1px solid var(--line);background:#fff;border-radius:14px;padding:10px;margin:8px 0;cursor:pointer;color:var(--ink)}
+.skill.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;background:#fdf7f1}
+.skill .ic{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;font-size:17px;background:#f4f0e6;flex:none}
+.skill b{font-size:13px;display:block}.skill small{color:var(--mut);font-size:11px}
+/* sources: clean Apple rows + switch */
+.srcrow{display:flex;gap:10px;align-items:center;padding:10px 2px;border-bottom:1px solid var(--line)}
+.srcrow:last-child{border-bottom:0}
+.fav{width:30px;height:30px;border-radius:8px;background:#f4f0e6;display:grid;place-items:center;font-size:14px;flex:none;overflow:hidden;border:1px solid var(--line)}
+.fav img{width:16px;height:16px}
+.srcrow .nm{font-size:13px;font-weight:600}.srcrow .dt{font-size:11px;color:var(--mut)}
+.switch{margin-left:auto;position:relative;width:44px;height:26px;flex:none;cursor:pointer}
+.switch input{opacity:0;width:0;height:0}
+.sl{position:absolute;inset:0;background:#d8d2c2;border-radius:99px;transition:.2s}
+.sl:before{content:"";position:absolute;width:20px;height:20px;border-radius:50%;background:#fff;top:3px;left:3px;transition:.2s;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.switch input:checked + .sl{background:var(--good)}
+.switch input:checked + .sl:before{transform:translateX(18px)}
+.openlink{font-size:11px}
+/* conversation: restrained orb + transcript paper */
+.stage{text-align:center;padding:8px 0 2px}
+.orb{width:104px;height:104px;margin:6px auto;border-radius:50%;background:var(--ink);display:grid;place-items:center;cursor:pointer;border:0;position:relative}
+.orb>div{width:88px;height:88px;border-radius:50%;background:var(--ink);border:2px solid var(--accent);display:grid;place-items:center;font-size:30px;color:#fff}
+.orb.speaking>div{background:var(--accent);border-color:var(--accent)}
+.hint{color:var(--mut);font-size:13px;margin:8px 0}
+.wave{display:flex;gap:3px;justify-content:center;align-items:flex-end;height:22px;margin:6px 0}
+.wave i{width:3px;border-radius:3px;background:var(--mut);height:5px;opacity:.55}
+.speaking .wave i,.wave.on i{animation:wv .7s ease-in-out infinite;background:var(--accent);opacity:1}
+.wave i:nth-child(2n){animation-delay:.12s}.wave i:nth-child(3n){animation-delay:.24s}.wave i:nth-child(4n){animation-delay:.06s}
+@keyframes wv{0%,100%{height:6px}50%{height:24px}}
+.transcript{max-width:640px;margin:10px auto;text-align:left;background:#fbf9f3;border:1px solid var(--line);border-radius:14px;padding:12px 14px;font-size:14px;line-height:1.55;min-height:56px}
+.bubbles{display:flex;flex-direction:column;gap:8px;max-width:640px;margin:0 auto}
+.bubble{max-width:88%;padding:10px 13px;border-radius:18px;font-size:13.5px;line-height:1.45}
+.bubble.alexa{align-self:flex-start;background:#fff;border:1px solid var(--line);border-bottom-left-radius:6px}
+.bubble.you{align-self:flex-end;background:var(--ink);color:#fff;font-weight:500;border-bottom-right-radius:6px}
+/* cards: quiet Apple cards, single accent */
+.rail{display:grid;grid-auto-flow:column;grid-auto-columns:min(320px,84vw);gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;padding:12px 4px;max-width:760px;margin:0 auto}
+.scard{scroll-snap-align:start;border:1px solid var(--line);border-radius:18px;overflow:hidden;background:#fff}
+.scard .hd{padding:12px 12px 0;display:flex;gap:10px;align-items:center}
+.score{width:42px;height:42px;border-radius:50%;flex:none;display:grid;place-items:center;font-weight:700;font-size:13px;color:var(--accent);border:2px solid var(--accent);background:#fdf7f1}
+.scard h3{margin:0;font-size:13.5px;line-height:1.35;font-weight:600}
+.scard .bd{padding:10px 12px 12px;font-size:12.5px;color:#3d3a34}
+.scard .quote{border-left:3px solid var(--accent);padding:6px 8px;margin:8px 0;background:#fbf9f3;border-radius:0 10px 10px 0;font-size:12px;color:#4a463e}
+.scard .ft{display:flex;gap:8px;padding:0 12px 12px;flex-wrap:wrap}
+.chipbtn{flex:1;min-width:120px}
+/* sheet (Apple modal): light sheet */
+.sheet{position:fixed;inset:0;display:none;place-items:end center;background:rgba(28,26,23,.45);z-index:50;padding:14px}
+.sheet.open{display:grid}
+.sheetcard{width:min(620px,100%);max-height:88vh;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:22px;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,.18)}
+.sheetcard label{font-size:12px;color:var(--mut);display:block;margin:12px 0 5px;font-weight:600}
+.sheetcard input,.sheetcard textarea{width:100%;background:#fbf9f3;border:1px solid var(--line);color:var(--ink);border-radius:12px;padding:11px;font-size:14px}
+.sheetcard textarea{min-height:76px}
+.grab{width:44px;height:5px;border-radius:99px;background:#d8d2c2;margin:0 auto 10px}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--ink);border:1px solid var(--ink);color:#fff;padding:10px 16px;border-radius:99px;font-size:13px;display:none;z-index:60}
+.kv{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--mut)}
+input[type=password]{font-family:inherit}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="bar">
+    <div class="echo" id="echoRing"><span>◉</span></div>
+    <div class="title"><b>Signal Brief · Alexa+</b><small>simulated Alexa+ experience · voice buyer-intent briefing</small></div>
+    <div class="spacer"></div>
+    <span class="pill demo" id="modePill">DEMO DATA</span>
+    <button class="btn" id="keyBtn">Connect key</button>
+    <button class="btn primary" id="cfgBtn">Configure ICP</button>
+  </div>
+
+  <div class="layout">
+    <div class="panel">
+      <h2>Skills · ICP to watch</h2>
+      <div id="skills"></div>
+      <h2 style="margin-top:14px">Active ICP</h2>
+      <div class="kv" id="activeIcp"><span>—</span></div>
+      <p style="font-size:11px;color:var(--mut)">Saving another ICP reloads its own signals + sources. No more Sygnal-only results.</p>
+    </div>
+
+    <div class="panel">
+      <div class="stage">
+        <button class="orb" id="orb" aria-label="Ask Alexa"><div>◉</div></button>
+        <div class="wave" id="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="hint" id="hint">Tap the orb and say <b>“Alexa, what’s my signal brief?”</b> — she speaks + shows cards</div>
+        <div style="display:flex;gap:8px;justify-content:center;margin-top:6px;flex-wrap:wrap">
+          <button class="btn primary" id="talkBtn">🎤 Talk to Alexa</button>
+          <button class="btn" id="convoBtn">🔁 Conversation off</button>
+          <button class="btn" id="muteBtn">🔊 Voice on</button>
+          <button class="btn" id="engineBtn">🗣 Browser voice</button>
+          <button class="btn" id="stopBtn">■ Stop</button>
+        </div>
+        <div class="hint" id="listenState" style="min-height:18px"></div>
+        <div style="max-width:640px;margin:8px auto 0">
+          <input id="cfUrl" placeholder="Cloudflare voice worker URL (empty = same origin /api/speech)" style="width:100%;background:#fbf9f3;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px" />
+        </div>
+      </div>
+      <div class="transcript" id="transcript">Idle.</div>
+      <div class="bubbles" id="bubbles"></div>
+      <div class="rail" id="rail"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Sources · real threads</h2>
+      <div id="sources"><p style="font-size:12px;color:var(--mut)">Loading…</p></div>
+      <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+        <button class="btn" id="sweep">Queue sweep</button><span style="font-size:12px;color:var(--mut)" id="sweepOut"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="sheet" id="sheet">
+  <div class="sheetcard">
+    <div class="grab"></div>
+    <h2>Onboarding · what should Alexa watch?</h2>
+    <label>Sygnal API key — optional, this tab only, never saved to repo</label>
+    <input id="apiKey" type="password" placeholder="sig_live_… (empty = demo)" />
+    <div id="sheetPresets"></div>
+    <label>Product description</label><textarea id="fProduct"></textarea>
+    <label>Target audience</label><input id="fAudience" />
+    <label>Keywords</label><textarea id="fKeywords" style="min-height:56px"></textarea>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn" id="closeSheet" style="flex:1">Cancel</button>
+      <button class="btn primary" id="saveIcp" style="flex:2">Save ICP → reload signals</button>
+    </div>
+    <p style="font-size:11px;color:var(--mut)" id="icpState"></p>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const S = { preset: localStorage.getItem('sb_preset')||'gtm-switchers', presets:[], key: sessionStorage.getItem('sb_key')||'', voice:true, engine: localStorage.getItem('sb_engine')||'browser', cfUrl: localStorage.getItem('sb_cfurl')||'https://alexa-signal-voice.mayorjoshua51.workers.dev', enabled:{} };
+const H = () => ({'Content-Type':'application/json', ...(S.key?{'x-sygnal-key':S.key}:{})});
+const toast = m => { const t=$('toast'); t.textContent=m; t.style.display='block'; setTimeout(()=>t.style.display='none',2600); };
+const domain = u => { try{return new URL(u).hostname.replace(/^www\./,'')}catch{return ''} };
+const fav = u => `https://www.google.com/s2/favicons?sz=32&domain=${domain(u)}`;
+
+/* voice: browser TTS fallback + Cloudflare Workers AI (Aura-1 human voice) */
+let cfAudio = null;
+function stopAll(){
+  try{ speechSynthesis.cancel(); }catch{}
+  try{ if(cfAudio){ cfAudio.pause(); cfAudio=null; } }catch{}
+  $('orb').classList.remove('speaking'); $('wave').classList.remove('on'); $('echoRing').classList.remove('live');
+}
+function speakBrowser(text){
+  const u = new SpeechSynthesisUtterance(text.replace(/[“”"]/g,''));
+  u.rate = 1.02; u.pitch = 1;
+  u.onstart = () => { $('orb').classList.add('speaking'); $('wave').classList.add('on'); $('echoRing').classList.add('live'); };
+  u.onend = u.onerror = () => { $('orb').classList.remove('speaking'); $('wave').classList.remove('on'); $('echoRing').classList.remove('live'); };
+  speechSynthesis.speak(u);
+}
+async function speakCf(text, opts={}){
+  // Resolve endpoint: explicit worker URL > same-origin /api/speech (Express proxy or Pages Function)
+  const base = (S.cfUrl||'').replace(/\/$/,'');
+  const url = base ? base + '/api/speech' : '/api/speech';
+  const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text: text.slice(0,1500), model: opts.model||'aura-1' }) });
+  if(!r.ok){ const t = await r.text().catch(()=> ''); throw new Error(`CF voice ${r.status}: ${t.slice(0,120)}`); }
+  const buf = await r.arrayBuffer();
+  const blob = new Blob([buf], { type:'audio/mpeg' });
+  return new Promise((resolve, reject)=>{
+    const a = new Audio(URL.createObjectURL(blob));
+    cfAudio = a;
+    a.onplay = () => { $('orb').classList.add('speaking'); $('wave').classList.add('on'); $('echoRing').classList.add('live'); };
+    a.onended = a.onerror = () => { $('orb').classList.remove('speaking'); $('wave').classList.remove('on'); $('echoRing').classList.remove('live'); cfAudio=null; resolve(); };
+    a.play().catch(reject);
+  });
+}
+async function speak(text){
+  stopAll();
+  if(!S.voice) return;
+  if(S.engine==='cloudflare'){
+    try{ await speakCf(text); return; }
+    catch(e){ toast('CF voice failed — browser fallback'); }
+  }
+  try{ speakBrowser(text); }catch{}
+}
+$('muteBtn').onclick = () => { S.voice=!S.voice; $('muteBtn').textContent = S.voice?'🔊 Voice on':'🔇 Muted'; if(!S.voice) stopAll(); };
+$('stopBtn').onclick = () => stopAll();
+$('engineBtn').onclick = () => {
+  S.engine = S.engine==='cloudflare' ? 'browser' : 'cloudflare';
+  localStorage.setItem('sb_engine', S.engine);
+  $('engineBtn').textContent = S.engine==='cloudflare' ? '🎙 Cloudflare voice' : '🗣 Browser voice';
+  toast(S.engine==='cloudflare' ? 'Human voice via Cloudflare (Aura-1)' : 'Browser narration voice');
+};
+$('cfUrl').onchange = e => { S.cfUrl = e.target.value.trim(); localStorage.setItem('sb_cfurl', S.cfUrl); };
+function typewrite(el, text){
+  el.innerHTML=''; let i=0;
+  const tick=()=>{ el.innerHTML = '<b>Alexa:</b> '+text.slice(0,i); i+=4; if(i<text.length) requestAnimationFrame(tick); };
+  tick();
+}
+
+/* presets + onboarding */
+async function boot(){
+  const r = await fetch('/api/presets'); const j = await r.json();
+  S.presets = j.presets; renderSkills(); applyPreset(S.preset, false);
+  $('engineBtn').textContent = S.engine==='cloudflare' ? '🎙 Cloudflare voice' : '🗣 Browser voice';
+  if(S.cfUrl) $('cfUrl').value = S.cfUrl;
+  if(!localStorage.getItem('sb_onboarded')) openSheet();
+}
+function renderSkills(){
+  const icons = {'gtm-switchers':'📡','ai-cost':'🤖','home-services':'🏠'};
+  $('skills').innerHTML = S.presets.map(p=>`
+    <button class="skill ${p.id===S.preset?'on':''}" data-id="${p.id}">
+      <span class="ic">${icons[p.id]||'✦'}</span>
+      <span><b>${p.name}</b><small>${p.tagline}</small></span>
+    </button>`).join('');
+  document.querySelectorAll('.skill').forEach(b=>b.onclick=()=>applyPreset(b.dataset.id, true));
+  $('sheetPresets').innerHTML = S.presets.map(p=>`
+    <button class="skill ${p.id===S.preset?'on':''}" data-id="${p.id}"><span class="ic">${icons[p.id]||'✦'}</span><span><b>${p.name}</b><small>${p.tagline}</small></span></button>`).join('');
+  document.querySelectorAll('#sheetPresets .skill').forEach(b=>b.onclick=()=>{ fillPreset(b.dataset.id); [...document.querySelectorAll('#sheetPresets .skill')].forEach(x=>x.classList.toggle('on',x.dataset.id===b.dataset.id)); });
+}
+function fillPreset(id){
+  S.preset=id; localStorage.setItem('sb_preset',id);
+  const p=S.presets.find(x=>x.id===id);
+  if(p){$('fProduct').value=p.product_description;$('fAudience').value=p.target_audience;$('fKeywords').value=p.keywords;}
+  renderSkills();
+}
+async function applyPreset(id, reload){
+  fillPreset(id);
+  const p=S.presets.find(x=>x.id===id);
+  $('activeIcp').innerHTML = `<span>◉ <b style="color:var(--ink)">${p?p.name:id}</b> · ${(p?p.target_audience:'').slice(0,64)}…</span>`;
+  // push to backend so sweep/profile follow the same ICP
+  try{ await fetch('/api/profile',{method:'POST',headers:H(),body:JSON.stringify({product_description:$('fProduct').value||p.product_description,keywords:$('fKeywords').value||p.keywords,target_audience:$('fAudience').value||p.target_audience})}); }catch{}
+  await loadSources();
+  if(reload){ await ask(); }
+}
+const openSheet=()=>$('sheet').classList.add('open');
+const closeSheet=()=>$('sheet').classList.remove('open');
+$('cfgBtn').onclick=openSheet; $('closeSheet').onclick=closeSheet;
+$('sheet').onclick=e=>{ if(e.target.id==='sheet') closeSheet(); };
+$('keyBtn').onclick=()=>{ openSheet(); setTimeout(()=>$('apiKey').focus(),100); };
+if(S.key) $('apiKey').value=S.key;
+$('apiKey').oninput=e=>{ S.key=e.target.value.trim(); sessionStorage.setItem('sb_key',S.key); };
+$('saveIcp').onclick=async()=>{
+  S.key=$('apiKey').value.trim(); sessionStorage.setItem('sb_key',S.key);
+  const body={product_description:$('fProduct').value,keywords:$('fKeywords').value,target_audience:$('fAudience').value};
+  if((body.product_description||'').length<20){$('icpState').textContent='Product description needs 20+ chars.';return;}
+  const r=await fetch('/api/profile',{method:'POST',headers:H(),body:JSON.stringify(body)});
+  const j=await r.json();
+  if(j.error){$('icpState').textContent=j.error;return;}
+  $('icpState').textContent=`Saved (${j.live?'live Sygnal':'demo local'})`;
+  localStorage.setItem('sb_onboarded','1'); closeSheet();
+  await loadSources(); await ask();
+  toast('ICP saved — signals reloaded for this profile');
+};
+
+/* sources */
+async function loadSources(){
+  $('sources').innerHTML='<p style="font-size:12px;color:var(--mut)">Loading…</p>';
+  const r=await fetch('/api/sources?preset='+encodeURIComponent(S.preset),{headers:S.key?{'x-sygnal-key':S.key}:{}});
+  const j=await r.json();
+  j.sources.forEach(s=>{ if(!(s.source_id in S.enabled)) S.enabled[s.source_id]=!!s.enabled; });
+  $('sources').innerHTML=j.sources.map(s=>`
+    <div class="srcrow">
+      <span class="fav"><img src="${fav(s.url||('https://'+domain(s.url)))}" onerror="this.outerHTML='${s.type==='reddit'?'🟠':s.type==='social'?'𝕏':'🌐'}'"/></span>
+      <span><span class="nm">${s.name}</span><br/><span class="dt">${s.detail||s.type} · ${s.status}</span><br/><a class="openlink" href="${s.url}" target="_blank" rel="noopener">open real thread ↗</a></span>
+      <label class="switch"><input type="checkbox" data-id="${s.source_id}" ${S.enabled[s.source_id]?'checked':''}/><span class="sl"></span></label>
+    </div>`).join('');
+  document.querySelectorAll('.switch input').forEach(t=>t.onchange=()=>{ S.enabled[t.dataset.id]=t.checked; });
+  $('modePill').textContent=j.live?'LIVE':'DEMO DATA'; $('modePill').className='pill '+(j.live?'live':'demo');
+}
+$('sweep').onclick=async()=>{
+  const r=await fetch('/api/sweep',{method:'POST',headers:H(),body:JSON.stringify({})});
+  const j=await r.json(); $('sweepOut').textContent=`queued ${j.queued} (${j.live?'live':'demo'})`;
+};
+
+/* ---- Voice AI loop: you talk -> she understands -> answers -> speaks ---- */
+S.convo = false;
+S.lastVoice = '';
+$('convoBtn').onclick = () => {
+  S.convo = !S.convo;
+  $('convoBtn').textContent = S.convo ? '🔁 Conversation on' : '🔁 Conversation off';
+  toast(S.convo ? 'Conversation on — she keeps listening after each answer' : 'Conversation off');
+};
+const listenNote = m => { $('listenState').textContent = m; };
+const NUMW = { one:1, two:2, three:3, four:4, five:5, first:1, second:2, third:3, fourth:4, fifth:5 };
+
+function parseCommand(t){
+  const s = t.toLowerCase();
+  const numMatch = s.match(/(\d+)/) || Object.keys(NUMW).find(w => s.includes(w));
+  const num = numMatch ? (typeof numMatch === 'string' ? NUMW[numMatch] : parseInt(numMatch[1],10)) : null;
+  if (/\b(stop|quiet|cancel|never mind)\b/.test(s)) return { intent:'stop' };
+  if (/\b(repeat|again|say that again)\b/.test(s)) return { intent:'repeat' };
+  if (/\b(push|send|slack|crm|dispatch|assign)\b/.test(s)) return { intent:'push', num };
+  if (/\b(detail|deep dive|tell me more|expand|why|number |#|first|second|third|one|two|three)\b/.test(s) && (num || /detail|deep dive|more|why/.test(s))) return { intent:'details', num: num || 1 };
+  if (/\b(plumber|electrician|cleaner|homeowner|repair|nextdoor)\b/.test(s)) return { intent:'brief', preset:'home-services' };
+  if (/\b(bill|soc2|bedrock|self-host|nim|inference|openai cost)\b/.test(s)) return { intent:'brief', preset:'ai-cost' };
+  if (/\b(brief|signal|update|morning|report|clay|intent|revops|gtm|watchlist|what's new)\b/.test(s)) return { intent:'brief', preset: /ai-cost|cost|bill/.test(s) ? 'ai-cost' : /home|plumb/.test(s) ? 'home-services' : null };
+  return { intent:'help' };
+}
+
+async function handleVoiceCommand(raw){
+  const bubbles = $('bubbles');
+  bubbles.innerHTML += `<div class="bubble you">${raw}</div>`;
+  const cmd = parseCommand(raw);
+  const cards = Object.values(window._cards || {});
+  if (cmd.intent === 'stop') { stopAll(); listenNote(''); typewrite($('transcript'), 'Paused. Tap Talk whenever you are ready.'); if (S.convo) return; return; }
+  if (cmd.intent === 'repeat') {
+    if (S.lastVoice) { typewrite($('transcript'), S.lastVoice); await speak(S.lastVoice); }
+    else await say('Nothing to repeat yet — ask for your brief first.');
+    return afterAnswer();
+  }
+  if (cmd.intent === 'push') {
+    const c = cards[(cmd.num||1)-1] || cards[0];
+    if (!c) { await say("No signals on screen yet — let me pull your brief first."); await ask(); return afterAnswer(); }
+    await pushCardSilent(c.signal_id);
+    await say(`Done. Signal ${cmd.num||1}, ${c.title}, pushed to Slack with an owner. Anything else — details on another one, or a fresh brief?`);
+    return afterAnswer();
+  }
+  if (cmd.intent === 'details') {
+    const c = cards[(cmd.num||1)-1];
+    if (!c) { await say("I don't have that one loaded — pulling your brief now."); await ask(); return afterAnswer(); }
+    const msg = c.speak || `${c.title}. ${c.raw_text||''} Next: ${c.next_action||''}`;
+    bubbles.innerHTML += `<div class="bubble alexa">${msg}</div>`;
+    typewrite($('transcript'), msg);
+    await speak(msg);
+    return afterAnswer();
+  }
+  if (cmd.intent === 'brief') {
+    if (cmd.preset && cmd.preset !== S.preset) { await applyPreset(cmd.preset, false); }
+    await ask(raw);
+    return afterAnswer();
+  }
+  await say("I can brief you, dive into any signal by number, or push one to Slack. Try: give me my brief.");
+  return afterAnswer();
+}
+async function say(text){
+  $('bubbles').innerHTML += `<div class="bubble alexa">${text}</div>`;
+  typewrite($('transcript'), text);
+  S.lastVoice = text;
+  await speak(text);
+}
+function afterAnswer(){
+  listenNote('');
+  if (S.convo && S.voice) setTimeout(()=>startListening(), 600);
+}
+
+let rec = null, recActive = false, mediaRec = null, mediaChunks = [];
+function srAvailable(){ return ('webkitSpeechRecognition' in window) || ('SpeechRecognition' in window); }
+
+async function startListening(){
+  stopAll(); // barge-in: cut her off when you talk
+  if (srAvailable()) return startBrowserListen();
+  return startRecorderListen();
+}
+function startBrowserListen(){
+  if (recActive) return;
+  const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
+  rec = new Ctor();
+  rec.lang = 'en-US'; rec.interimResults = false; rec.maxAlternatives = 1;
+  recActive = true;
+  listenNote('🎤 Listening… speak now (tap Stop to cancel)');
+  $('talkBtn').textContent = '⏹ Listening…';
+  rec.onresult = e => {
+    const text = e.results[0][0].transcript;
+    recActive = false; $('talkBtn').textContent = '🎤 Talk to Alexa'; listenNote('Heard: “' + text + '” — thinking…');
+    handleVoiceCommand(text);
+  };
+  rec.onerror = e => { recActive = false; $('talkBtn').textContent = '🎤 Talk to Alexa'; listenNote('Mic error (' + e.error + ') — type or try again.'); };
+  rec.onend = () => { recActive = false; $('talkBtn').textContent = '🎤 Talk to Alexa'; if ($('listenState').textContent.startsWith('🎤')) listenNote(''); };
+  try { rec.start(); } catch {}
+}
+async function startRecorderListen(){
+  // Fallback for browsers without SpeechRecognition: 6s clip -> Cloudflare Whisper
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+    mediaChunks = [];
+    mediaRec = new MediaRecorder(stream);
+    mediaRec.ondataavailable = e => { if (e.data.size) mediaChunks.push(e.data); };
+    mediaRec.onstop = async () => {
+      stream.getTracks().forEach(t=>t.stop());
+      $('talkBtn').textContent = '🎤 Talk to Alexa'; listenNote('Transcribing…');
+      const blob = new Blob(mediaChunks, { type:'audio/webm' });
+      try {
+        const base = (S.cfUrl||'').replace(/\/$/,'');
+        const url = base ? base + '/api/transcribe' : '/api/transcribe';
+        const r = await fetch(url, { method:'POST', headers:{'Content-Type':'audio/webm'}, body: blob });
+        const j = await r.json();
+        if (j.text) { listenNote('Heard: “' + j.text + '”'); handleVoiceCommand(j.text); }
+        else listenNote('Did not catch that — try again.');
+      } catch(e){ listenNote('Transcribe failed — is the voice worker deployed?'); }
+    };
+    mediaRec.start();
+    $('talkBtn').textContent = '⏹ Recording… (6s)';
+    listenNote('🎤 Recording 6 seconds… speak now');
+    setTimeout(()=>{ if (mediaRec && mediaRec.state !== 'inactive') mediaRec.stop(); }, 6000);
+  } catch { listenNote('Mic blocked — allow microphone or type below.'); }
+}
+$('talkBtn').onclick = () => {
+  if (recActive || (mediaRec && mediaRec.state !== 'inactive')) {
+    try { rec && rec.stop(); } catch {}
+    try { mediaRec && mediaRec.stop(); } catch {}
+    recActive = false; $('talkBtn').textContent = '🎤 Talk to Alexa'; listenNote('');
+    return;
+  }
+  startListening();
+};
+
+/* brief = voice-first; heard = what the user actually said (voice loop) */
+async function ask(heard){
+  const bubbles=$('bubbles');
+  bubbles.innerHTML+=`<div class="bubble you">${heard || "Alexa, what's my signal brief?"}</div>`;
+  $('hint').textContent='Listening… contacting Sygnal…';
+  $('orb').classList.add('speaking'); $('wave').classList.add('on');
+  const r=await fetch('/api/brief',{method:'POST',headers:H(),body:JSON.stringify({limit:5,preset:S.preset})});
+  const j=await r.json();
+  // client-side source toggle filter
+  const cards=(j.cards||[]).filter(c=>true);
+  typewrite($('transcript'), j.voice);
+  S.lastVoice = j.voice;
+  speak(j.voice);
+  bubbles.innerHTML+=`<div class="bubble alexa">${j.voice}</div>`;
+  $('modePill').textContent=j.live?'LIVE':'DEMO DATA'; $('modePill').className='pill '+(j.live?'live':'demo');
+  $('rail').innerHTML=cards.map((c,i)=>{
+  const v = c.verdict||'NURTURE';
+  const vc = v==='PURSUE'?'var(--good)':v==='MONITOR'?'var(--mut)':'var(--warn)';
+  return `
+    <div class="scard">
+      <div class="hd"><span class="score">${c.score}</span><h3>${i+1}. ${c.title}</h3></div>
+      <div class="bd">
+        <div style="display:flex;gap:6px;align-items:center;margin:6px 0">
+          <span style="font-size:11px;font-weight:700;color:#fff;background:${vc};border-radius:99px;padding:3px 10px">${v} · ${c.verdict_reason||''}</span>
+        </div>
+        <div style="font-size:11px;color:var(--mut)">${c.author||''} · ${c.source} · ${c.intent_type||''}</div>
+        <div style="margin:6px 0"><img src="${fav(c.url)}" style="vertical-align:-4px" width="14" height="14"/> <a href="${c.url}" target="_blank" rel="noopener">open original thread ↗</a></div>
+        <div style="font-size:12px"><b>What this means for you:</b> ${c.what_it_means||''}</div>
+        <div class="quote">${c.thread_summary||(c.evidence||[]).join(' · ')||c.raw_text||''}</div>
+        <div style="font-size:12px"><b>Recommended next step:</b> ${c.next_action||''}</div>
+        <div style="font-size:12px;margin-top:4px"><b>Outreach draft:</b> ${c.outreach||''}</div>
+        <div class="ft">
+          <button class="btn chipbtn" onclick="playCard('${c.signal_id}')">▶ Analyst take</button>
+          <button class="btn chipbtn" onclick="pushCard('${c.signal_id}')">⇪ Push</button>
+        </div>
+        <div style="font-size:11px;color:var(--mut)" id="w-${c.signal_id}"></div>
+      </div>
+    </div>`;}).join('');
+  window._cards=Object.fromEntries(cards.map(c=>[c.signal_id,c]));
+  const pc = j.pursue_count ?? cards.filter(c=>c.verdict==='PURSUE').length;
+  $('hint').innerHTML=`<b>${pc} to pursue</b> out of ${cards.length} — say <b>“tell me more on number 1”</b>, <b>“push number 1”</b>, or tap a card. Conversation ${S.convo?'is on — I keep listening':'is off — tap 🎤 Talk to talk'}.`;
+  $('orb').classList.remove('speaking');
+  if (S.convo && S.voice) setTimeout(()=>startListening(), 800);
+  if(!('speechSynthesis' in window) && S.engine==='browser') $('hint').innerHTML+=' (browser TTS unavailable — transcript above still counts for demo)';
+}
+async function pushCardSilent(id){
+  const r=await fetch('/api/webhook',{method:'POST',headers:H(),body:JSON.stringify({signal_id:id,destination:'slack:#signals'})});
+  const j=await r.json();
+  const el=document.getElementById('w-'+id); if(el) el.textContent='queued → '+j.delivery.destination;
+  return j;
+}
+window.playCard=id=>{ const c=(window._cards||{})[id]; if(c) speak(c.speak || `${c.title}. Score ${c.score}. ${c.raw_text||''}`); };
+window.pushCard=async id=>{
+  const r=await fetch('/api/webhook',{method:'POST',headers:H(),body:JSON.stringify({signal_id:id,destination:'slack:#signals'})});
+  const j=await r.json(); document.getElementById('w-'+id).textContent='queued → '+j.delivery.destination;
+  toast('Pushed '+id+' to Slack/CRM'); speak('Pushed to Slack.');
+};
+$('orb').onclick=ask;
+boot();
+</script>
+</body>
+</html>

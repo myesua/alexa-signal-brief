@@ -1,0 +1,44 @@
+[
+  {
+    "signal_id": "ai-001",
+    "score": 8.9,
+    "title": "“Our OpenAI bill tripled — looking for self-hosted alternative”",
+    "source_label": "r/LocalLLaMA",
+    "source_url": "https://www.reddit.com/r/LocalLLaMA/search.json?q=self+hosted+OpenAI+bill&restrict_sr=1&sort=new",
+    "thread_url": "https://www.reddit.com/r/LocalLLaMA/comments/openai-bill-tripled-selfhosted/",
+    "posted_at": "2026-09-12T08:00:00Z",
+    "intent_type": "switching",
+    "author": "CTO, SaaS ~50 emp",
+    "raw_text": "Our OpenAI bill tripled last month. Looking for a self-hosted Bedrock + NIM setup that keeps customer data private and SOC2 compliant.",
+    "direct_evidence": ["“bill tripled”", "“self-hosted Bedrock + NIM”", "“keeps customer data private”"],
+    "suggested_outreach": "Saw the bill-spike post — we run private RAG on Bedrock with data residency. Want a cost comparison on your volume?"
+  },
+  {
+    "signal_id": "ai-002",
+    "score": 8.3,
+    "title": "“SOC2 for AI features is blocking our enterprise deals”",
+    "source_label": "Hacker News",
+    "source_url": "https://news.ycombinator.com/search?query=SOC2+AI+data+residency",
+    "thread_url": "https://news.ycombinator.com/item?id=41320001",
+    "posted_at": "2026-09-11T13:00:00Z",
+    "intent_type": "compliance",
+    "author": "Founder, AI SaaS ~30 emp",
+    "raw_text": "SOC2 for our AI features is blocking enterprise deals. Need data residency + private inference before we can close.",
+    "direct_evidence": ["“blocking enterprise deals”", "“data residency”", "“private inference”"],
+    "suggested_outreach": "We ship SOC2-ready private inference — residency pinned to your region. Open to a 15-min architecture walkthrough?"
+  },
+  {
+    "signal_id": "ai-003",
+    "score": 7.6,
+    "title": "“Bedrock vs self-hosted NIM — what are you running in prod?”",
+    "source_label": "r/machinelearning",
+    "source_url": "https://www.reddit.com/r/MachineLearning/search.json?q=Bedrock+NIM+prod&restrict_sr=1&sort=new",
+    "thread_url": "https://www.reddit.com/r/MachineLearning/comments/bedrock-vs-nim-prod/",
+    "posted_at": "2026-09-10T16:00:00Z",
+    "intent_type": "evaluation",
+    "author": "AI Engineer, Fintech ~100 emp",
+    "raw_text": "Bedrock vs self-hosted NIM — what are you running in prod for RAG with pgvector? Cost and latency numbers appreciated.",
+    "direct_evidence": ["“Bedrock vs self-hosted NIM”", "“running in prod”", "“Cost and latency numbers”"],
+    "suggested_outreach": "Running both — pgvector + NIM cut our p95 40%. Happy to share the numbers on your workload."
+  }
+]

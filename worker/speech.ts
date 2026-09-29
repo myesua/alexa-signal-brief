@@ -48,21 +48,43 @@ export default {
     }
 
     // Speech-to-text: POST binary audio (webm/wav/mp3 from MediaRecorder) -> { text }
-    // Wrapped in try/catch so failures always carry CORS headers (else the
-    // browser reports a misleading CORS error instead of the real 500 cause).
+    // Fish ASR first (same free key), CF Whisper fallback. try/catch keeps CORS
+    // headers on every path so the browser never reports a misleading CORS error.
     if (url.pathname === "/api/transcribe" && request.method === "POST") {
       try {
         const ctype = request.headers.get("content-type") ?? "";
         const buf = await request.arrayBuffer();
         if (!buf.byteLength) return Response.json({ error: "empty audio" }, { status: 400, headers: CORS });
         if (buf.byteLength > 8 * 1024 * 1024) return Response.json({ error: "max 8MB per clip" }, { status: 400, headers: CORS });
+        let fishErr = "";
+        if (env.FISH_API_KEY) {
+          try {
+            const form = new FormData();
+            form.append("audio", new Blob([buf as ArrayBuffer], { type: ctype.split(";")[0] || "audio/webm" }), "clip");
+            form.append("language", "en");
+            const fr = await fetch("https://api.fish.audio/v1/asr", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${env.FISH_API_KEY}` },
+              body: form,
+            });
+            const fj = (await fr.json()) as any;
+            if (fr.ok && typeof fj?.text === "string") {
+              return Response.json({ text: fj.text, via: "fish" }, { headers: CORS });
+            }
+            throw new Error(`fish-asr ${fr.status}: ${JSON.stringify(fj).slice(0, 160)}`);
+          } catch (e) {
+            fishErr = String((e as Error)?.message ?? e).slice(0, 200);
+            console.warn("fish asr failed, falling back to whisper:", fishErr);
+          }
+        }
         const out = (await env.AI.run("@cf/openai/whisper", {
-          audio: [...new Uint8Array(buf)],
+          audio: [...new Uint8Array(buf as ArrayBuffer)],
         })) as unknown as { text?: string };
-        return Response.json({ text: out?.text ?? "", content_type: ctype.split(";")[0] }, { headers: CORS });
+        return Response.json({ text: out?.text ?? "", via: "whisper", content_type: ctype.split(";")[0] }, { headers: CORS });
       } catch (e) {
+        const detail = String((e as Error)?.message ?? e).slice(0, 300);
         return Response.json(
-          { error: "transcribe failed", detail: String((e as Error)?.message ?? e).slice(0, 300) },
+          { error: "transcribe failed", detail, fish_note: fishErr || undefined },
           { status: 502, headers: CORS }
         );
       }

@@ -70,13 +70,31 @@ export function createSpeechRouter() {
   );
 
   router.post("/api/transcribe", express.raw({ type: "audio/*", limit: "8mb" }), async (req, res) => {
-    if (!ACCOUNT || !TOKEN) {
-      return res.status(501).json({
-        error: "Cloudflare credentials not configured. Use the deployed worker/speech.ts /api/transcribe instead.",
-      });
-    }
     const buf = req.body as Buffer;
     if (!buf?.length) return res.status(400).json({ error: "empty audio" });
+    // Fish ASR first (same free key), Whisper fallback
+    if (FISH_KEY) {
+      try {
+        const form = new FormData();
+        form.append("audio", new Blob([new Uint8Array(buf)], { type: "audio/webm" }), "clip");
+        form.append("language", "en");
+        const fr = await fetch("https://api.fish.audio/v1/asr", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${FISH_KEY}` },
+          body: form,
+        });
+        const fj = (await fr.json()) as any;
+        if (fr.ok && typeof fj?.text === "string") return res.json({ text: fj.text, via: "fish" });
+        throw new Error(`fish-asr ${fr.status}: ${JSON.stringify(fj).slice(0, 160)}`);
+      } catch (e) {
+        console.warn("fish asr failed, falling back to whisper:", (e as Error).message);
+      }
+    }
+    if (!ACCOUNT || !TOKEN) {
+      return res.status(501).json({
+        error: "Transcription providers unavailable. Set FISH_API_KEY in .env, or deploy worker/speech.ts.",
+      });
+    }
     try {
       const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/ai/run/@cf/openai/whisper`, {
         method: "POST",
@@ -85,7 +103,7 @@ export function createSpeechRouter() {
       });
       if (!r.ok) return res.status(502).json({ error: `Whisper ${r.status}: ${(await r.text()).slice(0, 200)}` });
       const j = (await r.json()) as any;
-      return res.json({ text: j?.result?.text ?? j?.text ?? "" });
+      return res.json({ text: j?.result?.text ?? j?.text ?? "", via: "whisper" });
     } catch (e) {
       return res.status(502).json({ error: `transcribe failed: ${(e as Error).message}` });
     }

@@ -581,7 +581,7 @@ window.pushCard=async id=>{
   const j=await r.json(); document.getElementById('w-'+id).textContent='queued → '+j.delivery.destination;
   toast('Pushed '+id+' to Slack/CRM'); speak('Pushed to Slack.');
 };
-$('orb').onclick=ask;
+$('orb').onclick=()=>ask();
 boot();
 </script>
 </body>

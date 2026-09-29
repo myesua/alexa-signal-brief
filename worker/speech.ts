@@ -10,24 +10,15 @@ interface Env {
   NVIDIA_TTS_MODEL?: string;
   NVIDIA_TTS_VOICE?: string;
   FISH_API_KEY?: string;
-  ELEVENLABS_API_KEY?: string;
-  ELEVENLABS_VOICE_ID?: string;
 }
 
-// Free, no-card providers first (both bypass CF neuron quota):
-// 1) Fish Audio s2.1-pro-free — no hard cap. 2) ElevenLabs free 10k credits/mo.
+// Free, no-card provider first (bypasses CF neuron quota):
+// Fish Audio s2.1-pro-free — no hard cap.
 async function fishTTS(text: string, key: string): Promise<Response> {
   return fetch("https://api.fish.audio/v1/tts", {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", model: "s2.1-pro-free" },
     body: JSON.stringify({ text: text.slice(0, 1000), format: "mp3", normalize: true }),
-  });
-}
-async function elevenTTS(text: string, key: string, voiceId: string): Promise<Response> {
-  return fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
-    method: "POST",
-    headers: { "xi-api-key": key, "Content-Type": "application/json", Accept: "audio/mpeg" },
-    body: JSON.stringify({ text: text.slice(0, 1000), model_id: "eleven_flash_v2_5" }),
   });
 }
 function audioOrThrow(r: Response, label: string): Promise<Response> {
@@ -51,7 +42,7 @@ export default {
 
     if (url.pathname === "/api/speech-health" && request.method === "GET") {
       return Response.json(
-        { ok: true, fish: Boolean(env.FISH_API_KEY), elevenlabs: Boolean(env.ELEVENLABS_API_KEY), nvidia: Boolean(env.NVIDIA_API_KEY), models: ["fish:s2.1-pro-free", "elevenlabs:flash", "nvidia-nim", "@cf/deepgram/aura-1", "@cf/myshell-ai/melotts", "@cf/openai/whisper"] },
+        { ok: true, fish: Boolean(env.FISH_API_KEY), nvidia: Boolean(env.NVIDIA_API_KEY), models: ["fish:s2.1-pro-free", "nvidia-nim", "@cf/deepgram/aura-1", "@cf/myshell-ai/melotts", "@cf/openai/whisper"] },
         { headers: CORS }
       );
     }
@@ -99,19 +90,10 @@ export default {
         headers: { ...CORS, "Content-Type": r.headers.get("content-type") ?? "audio/mpeg", "X-Voice-Model": label },
       });
     // 1) Fish Audio s2.1-pro-free (free, no hard cap) 2) ElevenLabs free tier
+    // 1) Fish Audio s2.1-pro-free (free, no hard cap)
     if (want === "auto" && env.FISH_API_KEY) {
       try {
         return passthrough(await audioOrThrow(await fishTTS(text, env.FISH_API_KEY), "fish"), "fish:s2.1-pro-free");
-      } catch (e) {
-        failures.push(String((e as Error)?.message ?? e).slice(0, 160));
-      }
-    }
-    if (want === "auto" && env.ELEVENLABS_API_KEY) {
-      try {
-        return passthrough(
-          await audioOrThrow(await elevenTTS(text, env.ELEVENLABS_API_KEY, env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM"), "elevenlabs"),
-          "elevenlabs:flash"
-        );
       } catch (e) {
         failures.push(String((e as Error)?.message ?? e).slice(0, 160));
       }

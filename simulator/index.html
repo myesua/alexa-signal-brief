@@ -476,19 +476,23 @@ async function startRecorderListen(){
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
     mediaChunks = [];
-    mediaRec = new MediaRecorder(stream);
+    // Prefer wav when the browser can record it (Whisper's happiest format), else webm
+    const mime = (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/wav')) ? 'audio/wav' : 'audio/webm';
+    vlog('stt:rec', 'recorder starting', { mime });
+    mediaRec = new MediaRecorder(stream, MediaRecorder.isTypeSupported(mime) ? { mimeType: mime } : undefined);
     mediaRec.ondataavailable = e => { if (e.data.size) mediaChunks.push(e.data); };
     mediaRec.onstop = async () => {
       stream.getTracks().forEach(t=>t.stop());
       $('talkBtn').textContent = '🎤 Tap to talk'; listenNote('Turning your words into text…');
-      const blob = new Blob(mediaChunks, { type:'audio/webm' });
+      const blob = new Blob(mediaChunks, { type: mediaRec.mimeType || 'audio/webm' });
       vlog('stt:rec', 'recorded clip', { bytes: blob.size, type: blob.type });
       try {
         const base = (S.cfUrl||'').replace(/\/$/,'');
         const url = base ? base + '/api/transcribe' : '/api/transcribe';
         const t0 = performance.now();
-        const r = await fetch(url, { method:'POST', headers:{'Content-Type':'audio/webm'}, body: blob });
+        const r = await fetch(url, { method:'POST', headers:{'Content-Type': blob.type || 'audio/webm'}, body: blob });
         const j = await r.json();
+        if (!r.ok) { vlog('stt:err', 'transcribe rejected', { status: r.status, err: (j.detail || j.error || '').slice(0,200) }); listenNote('Transcription hiccup — tap again or type below.'); return; }
         vlog('stt:whisper', 'transcription result', { text: j.text || '', ms: Math.round(performance.now()-t0) });
         if (j.text) { listenNote('Heard: “' + j.text + '”'); handleVoiceCommand(j.text); }
         else listenNote('Did not catch that — try again.');

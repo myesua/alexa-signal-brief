@@ -28,14 +28,24 @@ export default {
     }
 
     // Speech-to-text: POST binary audio (webm/wav/mp3 from MediaRecorder) -> { text }
+    // Wrapped in try/catch so failures always carry CORS headers (else the
+    // browser reports a misleading CORS error instead of the real 500 cause).
     if (url.pathname === "/api/transcribe" && request.method === "POST") {
-      const buf = await request.arrayBuffer();
-      if (!buf.byteLength) return Response.json({ error: "empty audio" }, { status: 400, headers: CORS });
-      if (buf.byteLength > 8 * 1024 * 1024) return Response.json({ error: "max 8MB per clip" }, { status: 400, headers: CORS });
-      const out = (await env.AI.run("@cf/openai/whisper", {
-        audio: [...new Uint8Array(buf)],
-      })) as unknown as { text?: string };
-      return Response.json({ text: out?.text ?? "" }, { headers: CORS });
+      try {
+        const ctype = request.headers.get("content-type") ?? "";
+        const buf = await request.arrayBuffer();
+        if (!buf.byteLength) return Response.json({ error: "empty audio" }, { status: 400, headers: CORS });
+        if (buf.byteLength > 8 * 1024 * 1024) return Response.json({ error: "max 8MB per clip" }, { status: 400, headers: CORS });
+        const out = (await env.AI.run("@cf/openai/whisper", {
+          audio: [...new Uint8Array(buf)],
+        })) as unknown as { text?: string };
+        return Response.json({ text: out?.text ?? "", content_type: ctype.split(";")[0] }, { headers: CORS });
+      } catch (e) {
+        return Response.json(
+          { error: "transcribe failed", detail: String((e as Error)?.message ?? e).slice(0, 300) },
+          { status: 502, headers: CORS }
+        );
+      }
     }
 
     if (url.pathname !== "/api/speech" || request.method !== "POST") {

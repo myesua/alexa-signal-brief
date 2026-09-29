@@ -181,16 +181,8 @@ const $ = id => document.getElementById(id);
 const S = { preset: localStorage.getItem('sb_preset')||'gtm-switchers', presets:[], key: sessionStorage.getItem('sb_key')||'', voice:true, engine: localStorage.getItem('sb_engine')||'browser', cfUrl: localStorage.getItem('sb_cfurl')||'https://alexa-signal-voice.mayorjoshua51.workers.dev', enabled:{} };
 const H = () => ({'Content-Type':'application/json', ...(S.key?{'x-sygnal-key':S.key}:{})});
 const toast = m => { const t=$('toast'); t.textContent=m; t.style.display='block'; setTimeout(()=>t.style.display='none',2600); };
-/* Cloudflare daily quota memory: when the server says allocation is spent,
-   remember ~20h and skip server-transcription attempts (Fish ASR bills credits,
-   Whisper burns the same quota). Browser typing + typed box keep working. */
-const QUOTA_TTL = 20 * 3600 * 1000;
-const quotaOut = () => {
-  const t = Number(localStorage.getItem('sb_quota_out') || 0);
-  return t && (Date.now() - t < QUOTA_TTL);
-};
-const quotaHit = () => localStorage.setItem('sb_quota_out', String(Date.now()));
-const quotaClear = () => localStorage.removeItem('sb_quota_out');
+/* Quota errors are never hidden — on a spent allocation we toast the native
+   fallback (built-in talk / typing) and let every attempt through. */
 const isQuotaErr = s => /allocation|neurons|quota|402/i.test(s || '');
 const domain = u => { try{return new URL(u).hostname.replace(/^www\./,'')}catch{return ''} };
 const fav = u => `https://www.google.com/s2/favicons?sz=32&domain=${domain(u)}`;
@@ -219,7 +211,6 @@ async function speakCf(text, opts={}){
   if(!r.ok){ const t = await r.text().catch(()=> ''); vlog('tts:err', 'Cloudflare voice failed', { status: r.status, body: t.slice(0,120), ms: Math.round(performance.now()-t0) }); throw new Error(`CF voice ${r.status}: ${t.slice(0,120)}`); }
   const buf = await r.arrayBuffer();
   vlog('tts:ok', 'Cloudflare audio received', { bytes: buf.byteLength, model: r.headers.get('x-voice-model'), ms: Math.round(performance.now()-t0) });
-  quotaClear();
   const blob = new Blob([buf], { type:'audio/mpeg' });
   return new Promise((resolve, reject)=>{
     const a = new Audio(URL.createObjectURL(blob));
@@ -238,8 +229,8 @@ async function speak(text){
     catch(e){
       const m = String(e).slice(0,200);
       vlog('tts:fallback', 'falling back to browser voice', { err: m });
-      if (isQuotaErr(m)) quotaHit();
-      toast(isQuotaErr(m) ? 'Human voices refilled tomorrow — basic voice for now' : 'Human voice failed — basic voice instead');
+      if (isQuotaErr(m)) toast('Server voice used up — using built-in voice instead');
+      else toast('Human voice failed — basic voice instead');
     }
   }
   try{ speakBrowser(text); }catch{}
@@ -489,12 +480,6 @@ function startBrowserListen(){
   try { rec.start(); } catch {}
 }
 async function startRecorderListen(){
-  if (quotaOut()) {
-    listenNote('Server hearing refills tomorrow — use built-in tap-to-talk or type below for now.');
-    vlog('stt:skip', 'quota remembered, skipping server transcribe');
-    if (srAvailable()) return startBrowserListen();
-    return;
-  }
   // Fallback for browsers without SpeechRecognition: clip -> server transcribe
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
@@ -519,14 +504,13 @@ async function startRecorderListen(){
           const d = (j.detail || j.error || '');
           vlog('stt:err', 'transcribe rejected', { status: r.status, err: d.slice(0,200) });
           if (isQuotaErr(d) || isQuotaErr(JSON.stringify(j))) {
-            quotaHit();
-            listenNote('Server hearing refills tomorrow — tap 🎤 Tap to talk (built-in) or type below for now.');
+            listenNote('Server voice is used up for today.');
+            toast('Server voice used up — try Tap to talk (built-in mic) or type below');
           }
           else listenNote('Transcription hiccup — tap again or type below.');
           return;
         }
         vlog('stt:whisper', 'transcription result', { via: j.via, text: j.text || '', ms: Math.round(performance.now()-t0) });
-        quotaClear();
         if (j.text) { listenNote('Heard: “' + j.text + '”'); handleVoiceCommand(j.text); }
         else listenNote('Did not catch that — try again.');
       } catch(e){ vlog('stt:err', 'transcribe failed', { err: String(e).slice(0,120) }); listenNote('Transcribe failed — is the voice worker deployed?'); }

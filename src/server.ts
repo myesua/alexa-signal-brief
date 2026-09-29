@@ -65,11 +65,13 @@ app.post('/api/brief', async (req, res) => {
   const presetId = String(req.body?.preset ?? 'gtm-switchers');
   const preset = PRESETS.find((p) => p.id === presetId) ?? PRESETS[0];
   const { signals, live } = await listSignalsRanked(limit, reqKey(req), preset.id);
-  const { analyzeSignals, buildVoiceScript } = await import('./intelligence.js');
+  const { analyzeSignals, buildVoiceScript, buildSpokenSummary } = await import('./intelligence.js');
   const analyzed = analyzeSignals(signals, preset);
   const voice = buildVoiceScript(analyzed, preset, live);
+  const spoken = buildSpokenSummary(analyzed, preset, live);
   res.json({
     voice,
+    spoken,
     live,
     preset: preset.id,
     pursue_count: analyzed.filter((a) => a.verdict === 'PURSUE').length,

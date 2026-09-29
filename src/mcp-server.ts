@@ -55,17 +55,18 @@ export function createMcpRouter() {
     if (method === "tools/call") {
       const { listSignalsRanked } = await import("./sygnal-client.js");
       const { PRESETS } = await import("./presets.js");
-      const { analyzeSignals, buildVoiceScript } = await import("./intelligence.js");
+      const { analyzeSignals, buildVoiceScript, buildSpokenSummary } = await import("./intelligence.js");
       if (params?.name === "alexa_signal_brief") {
         const preset = PRESETS.find((p: any) => p.id === params?.arguments?.preset) ?? PRESETS[0];
         const { signals, live } = await listSignalsRanked(params?.arguments?.limit ?? 3, "", preset.id);
         const analyzed = analyzeSignals(signals, preset);
         const voice = buildVoiceScript(analyzed, preset, live);
+        const spoken = buildSpokenSummary(analyzed, preset, live);
         return res.json({
           jsonrpc: "2.0",
           id,
           result: {
-            content: [{ type: "text", text: JSON.stringify({ voice, signals: analyzed, live, preset: preset.id }) }],
+            content: [{ type: "text", text: JSON.stringify({ voice, spoken, signals: analyzed, live, preset: preset.id }) }],
           },
         });
       }

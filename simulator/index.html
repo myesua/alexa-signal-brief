@@ -90,11 +90,11 @@ input[type=password]{font-family:inherit}
 <div class="shell">
   <div class="bar">
     <div class="echo" id="echoRing"><span>◉</span></div>
-    <div class="title"><b>Signal Brief · Alexa+</b><small>simulated Alexa+ experience · voice buyer-intent briefing</small></div>
+    <div class="title"><b>Signal Brief · Alexa+</b><small>Your voice assistant for buyer signals — talk or type below</small></div>
     <div class="spacer"></div>
     <span class="pill demo" id="modePill">DEMO DATA</span>
-    <button class="btn" id="keyBtn">Connect key</button>
-    <button class="btn primary" id="cfgBtn">Configure ICP</button>
+    <button class="btn" id="keyBtn">Sygnal key (optional)</button>
+    <button class="btn primary" id="cfgBtn">Choose what to watch</button>
   </div>
 
   <div class="layout">
@@ -110,17 +110,22 @@ input[type=password]{font-family:inherit}
       <div class="stage">
         <button class="orb" id="orb" aria-label="Ask Alexa"><div>◉</div></button>
         <div class="wave" id="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-        <div class="hint" id="hint">Tap the orb and say <b>“Alexa, what’s my signal brief?”</b> — she speaks + shows cards</div>
+        <div class="hint" id="hint">Tap the circle or <b>Tap to talk</b>, then say <b>“give me my brief”</b>. She answers in her own words — short aloud, full detail on screen.</div>
         <div style="display:flex;gap:8px;justify-content:center;margin-top:6px;flex-wrap:wrap">
-          <button class="btn primary" id="talkBtn">🎤 Talk to Alexa</button>
-          <button class="btn" id="convoBtn">🔁 Conversation off</button>
+          <button class="btn primary" id="talkBtn">🎤 Tap to talk</button>
+          <button class="btn" id="convoBtn">Keep listening: Off</button>
           <button class="btn" id="muteBtn">🔊 Voice on</button>
-          <button class="btn" id="engineBtn">🗣 Browser voice</button>
+          <button class="btn" id="engineBtn">AI voice: On</button>
           <button class="btn" id="stopBtn">■ Stop</button>
         </div>
+        <div class="hint" style="font-size:11px">Keep listening: when On, she listens again after each answer so you can keep talking. AI voice: human-like voice (uses a little free quota). When Off, plainer built-in voice.</div>
         <div class="hint" id="listenState" style="min-height:18px"></div>
+        <div style="max-width:640px;margin:8px auto 0;display:flex;gap:8px">
+          <input id="typeBox" placeholder='No mic? Type here — e.g. “give me my brief”' style="flex:1;background:#fbf9f3;border:1px solid var(--line);border-radius:10px;padding:9px;font-size:13px" />
+          <button class="btn primary" id="sendBtn">Send</button>
+        </div>
         <div style="max-width:640px;margin:8px auto 0">
-          <input id="cfUrl" placeholder="Cloudflare voice worker URL (empty = same origin /api/speech)" style="width:100%;background:#fbf9f3;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px" />
+          <input id="cfUrl" placeholder="Voice server address (already filled — only change if asked)" style="width:100%;background:#fbf9f3;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px" />
         </div>
       </div>
       <div class="transcript" id="transcript">Idle.</div>
@@ -159,7 +164,7 @@ input[type=password]{font-family:inherit}
 
 <script>
 const $ = id => document.getElementById(id);
-const S = { preset: localStorage.getItem('sb_preset')||'gtm-switchers', presets:[], key: sessionStorage.getItem('sb_key')||'', voice:true, engine: localStorage.getItem('sb_engine')||'browser', cfUrl: localStorage.getItem('sb_cfurl')||'https://alexa-signal-voice.mayorjoshua51.workers.dev', enabled:{} };
+const S = { preset: localStorage.getItem('sb_preset')||'gtm-switchers', presets:[], key: sessionStorage.getItem('sb_key')||'', voice:true, engine: localStorage.getItem('sb_engine')||'cloudflare', cfUrl: localStorage.getItem('sb_cfurl')||'https://alexa-signal-voice.mayorjoshua51.workers.dev', enabled:{} };
 const H = () => ({'Content-Type':'application/json', ...(S.key?{'x-sygnal-key':S.key}:{})});
 const toast = m => { const t=$('toast'); t.textContent=m; t.style.display='block'; setTimeout(()=>t.style.display='none',2600); };
 const domain = u => { try{return new URL(u).hostname.replace(/^www\./,'')}catch{return ''} };
@@ -204,13 +209,13 @@ async function speak(text){
   }
   try{ speakBrowser(text); }catch{}
 }
-$('muteBtn').onclick = () => { S.voice=!S.voice; $('muteBtn').textContent = S.voice?'🔊 Voice on':'🔇 Muted'; if(!S.voice) stopAll(); };
+$('muteBtn').onclick = () => { S.voice=!S.voice; $('muteBtn').textContent = S.voice?'🔊 Voice on':'🔇 Voice off'; if(!S.voice) stopAll(); };
 $('stopBtn').onclick = () => stopAll();
 $('engineBtn').onclick = () => {
   S.engine = S.engine==='cloudflare' ? 'browser' : 'cloudflare';
   localStorage.setItem('sb_engine', S.engine);
-  $('engineBtn').textContent = S.engine==='cloudflare' ? '🎙 Cloudflare voice' : '🗣 Browser voice';
-  toast(S.engine==='cloudflare' ? 'Human voice via Cloudflare (Aura-1)' : 'Browser narration voice');
+  $('engineBtn').textContent = S.engine==='cloudflare' ? 'AI voice: On' : 'AI voice: Off';
+  toast(S.engine==='cloudflare' ? 'Human-like voice on' : 'Basic built-in voice on');
 };
 $('cfUrl').onchange = e => { S.cfUrl = e.target.value.trim(); localStorage.setItem('sb_cfurl', S.cfUrl); };
 function typewrite(el, text){
@@ -223,7 +228,8 @@ function typewrite(el, text){
 async function boot(){
   const r = await fetch('/api/presets'); const j = await r.json();
   S.presets = j.presets; renderSkills(); applyPreset(S.preset, false);
-  $('engineBtn').textContent = S.engine==='cloudflare' ? '🎙 Cloudflare voice' : '🗣 Browser voice';
+  $('engineBtn').textContent = S.engine==='cloudflare' ? 'AI voice: On' : 'AI voice: Off';
+  $('convoBtn').textContent = S.convo ? 'Keep listening: On' : 'Keep listening: Off';
   if(S.cfUrl) $('cfUrl').value = S.cfUrl;
   if(!localStorage.getItem('sb_onboarded')) openSheet();
 }
@@ -299,8 +305,8 @@ S.convo = false;
 S.lastVoice = '';
 $('convoBtn').onclick = () => {
   S.convo = !S.convo;
-  $('convoBtn').textContent = S.convo ? '🔁 Conversation on' : '🔁 Conversation off';
-  toast(S.convo ? 'Conversation on — she keeps listening after each answer' : 'Conversation off');
+  $('convoBtn').textContent = S.convo ? 'Keep listening: On' : 'Keep listening: Off';
+  toast(S.convo ? 'She will keep listening after each answer' : 'She will answer once and stop');
 };
 const listenNote = m => { $('listenState').textContent = m; };
 const NUMW = { one:1, two:2, three:3, four:4, five:5, first:1, second:2, third:3, fourth:4, fifth:5 };
@@ -383,11 +389,20 @@ function startBrowserListen(){
   $('talkBtn').textContent = '⏹ Listening…';
   rec.onresult = e => {
     const text = e.results[0][0].transcript;
-    recActive = false; $('talkBtn').textContent = '🎤 Talk to Alexa'; listenNote('Heard: “' + text + '” — thinking…');
+    recActive = false; $('talkBtn').textContent = '🎤 Tap to talk'; listenNote('Heard: “' + text + '” — thinking…');
     handleVoiceCommand(text);
   };
-  rec.onerror = e => { recActive = false; $('talkBtn').textContent = '🎤 Talk to Alexa'; listenNote('Mic error (' + e.error + ') — type or try again.'); };
-  rec.onend = () => { recActive = false; $('talkBtn').textContent = '🎤 Talk to Alexa'; if ($('listenState').textContent.startsWith('🎤')) listenNote(''); };
+  rec.onerror = e => {
+    recActive = false; $('talkBtn').textContent = '🎤 Tap to talk';
+    if (e.error === 'network') {
+      // Browser voice typing needs Google's servers (https + network).
+      // Fall back to recording -> Cloudflare transcription automatically.
+      listenNote('Built-in typing had no connection — recording instead…');
+      setTimeout(()=>startRecorderListen(), 400);
+    } else if (e.error === 'not-allowed') listenNote('Mic is blocked — allow it in the browser bar, or type below.');
+    else listenNote('Did not catch that (' + e.error + ') — tap again or type below.');
+  };
+  rec.onend = () => { recActive = false; $('talkBtn').textContent = '🎤 Tap to talk'; if ($('listenState').textContent.startsWith('🎤')) listenNote(''); };
   try { rec.start(); } catch {}
 }
 async function startRecorderListen(){
@@ -399,7 +414,7 @@ async function startRecorderListen(){
     mediaRec.ondataavailable = e => { if (e.data.size) mediaChunks.push(e.data); };
     mediaRec.onstop = async () => {
       stream.getTracks().forEach(t=>t.stop());
-      $('talkBtn').textContent = '🎤 Talk to Alexa'; listenNote('Transcribing…');
+      $('talkBtn').textContent = '🎤 Tap to talk'; listenNote('Turning your words into text…');
       const blob = new Blob(mediaChunks, { type:'audio/webm' });
       try {
         const base = (S.cfUrl||'').replace(/\/$/,'');
@@ -411,20 +426,27 @@ async function startRecorderListen(){
       } catch(e){ listenNote('Transcribe failed — is the voice worker deployed?'); }
     };
     mediaRec.start();
-    $('talkBtn').textContent = '⏹ Recording… (6s)';
-    listenNote('🎤 Recording 6 seconds… speak now');
-    setTimeout(()=>{ if (mediaRec && mediaRec.state !== 'inactive') mediaRec.stop(); }, 6000);
-  } catch { listenNote('Mic blocked — allow microphone or type below.'); }
+    $('talkBtn').textContent = '⏹ Stop recording';
+    listenNote('🎤 Recording… tap Stop when you finish talking');
+    setTimeout(()=>{ if (mediaRec && mediaRec.state !== 'inactive') mediaRec.stop(); }, 15000);
+  } catch { listenNote('Mic blocked — allow microphone in the browser bar, or type below.'); }
 }
 $('talkBtn').onclick = () => {
   if (recActive || (mediaRec && mediaRec.state !== 'inactive')) {
     try { rec && rec.stop(); } catch {}
     try { mediaRec && mediaRec.stop(); } catch {}
-    recActive = false; $('talkBtn').textContent = '🎤 Talk to Alexa'; listenNote('');
+    recActive = false; $('talkBtn').textContent = '🎤 Tap to talk'; listenNote('');
     return;
   }
   startListening();
 };
+$('sendBtn').onclick = () => {
+  const t = $('typeBox').value.trim();
+  if (!t) return;
+  $('typeBox').value = '';
+  handleVoiceCommand(t);
+};
+$('typeBox').onkeydown = e => { if (e.key === 'Enter') $('sendBtn').click(); };
 
 /* brief = voice-first; heard = what the user actually said (voice loop) */
 async function ask(heard){
@@ -436,9 +458,9 @@ async function ask(heard){
   const j=await r.json();
   // client-side source toggle filter
   const cards=(j.cards||[]).filter(c=>true);
-  typewrite($('transcript'), j.voice);
-  S.lastVoice = j.voice;
-  speak(j.voice);
+  typewrite($('transcript'), j.voice); // full story stays on screen
+  S.lastVoice = j.spoken || j.voice;
+  speak(j.spoken || j.voice); // short summary aloud — details live on cards + "tell me more"
   bubbles.innerHTML+=`<div class="bubble alexa">${j.voice}</div>`;
   $('modePill').textContent=j.live?'LIVE':'DEMO DATA'; $('modePill').className='pill '+(j.live?'live':'demo');
   $('rail').innerHTML=cards.map((c,i)=>{
@@ -466,7 +488,7 @@ async function ask(heard){
     </div>`;}).join('');
   window._cards=Object.fromEntries(cards.map(c=>[c.signal_id,c]));
   const pc = j.pursue_count ?? cards.filter(c=>c.verdict==='PURSUE').length;
-  $('hint').innerHTML=`<b>${pc} to pursue</b> out of ${cards.length} — say <b>“tell me more on number 1”</b>, <b>“push number 1”</b>, or tap a card. Conversation ${S.convo?'is on — I keep listening':'is off — tap 🎤 Talk to talk'}.`;
+  $('hint').innerHTML=`<b>${pc} to pursue</b> out of ${cards.length} — she told you the short version aloud; the full story is on screen. Say or type <b>“tell me more on number 1”</b>, or <b>“push number 1”</b> to send it on. ${S.convo?'Keep listening is on — she keeps listening.':'Tap 🎤 Tap to talk to speak again.'}`;
   $('orb').classList.remove('speaking');
   if (S.convo && S.voice) setTimeout(()=>startListening(), 800);
   if(!('speechSynthesis' in window) && S.engine==='browser') $('hint').innerHTML+=' (browser TTS unavailable — transcript above still counts for demo)';

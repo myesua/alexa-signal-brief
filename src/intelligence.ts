@@ -113,8 +113,7 @@ export function analyzeSignals(signals: any[], preset: IcpPreset): AnalyzedSigna
   });
 }
 
-export function buildVoiceScript(analyzed: AnalyzedSignal[], preset: IcpPreset, live: boolean): string {
-  const n = analyzed.length;
+export function buildVoiceScript(analyzed: AnalyzedSignal[], preset: IcpPreset, live: boolean): string {  const n = analyzed.length;
   const pursue = analyzed.filter((a) => a.verdict === "PURSUE");
   const who = preset.id === "home-services" ? "homeowner requests" : preset.id === "ai-cost" ? "infrastructure signals" : "buyer signals";
   const head =
@@ -141,4 +140,27 @@ export function buildVoiceScript(analyzed: AnalyzedSignal[], preset: IcpPreset, 
       ? ` If you only do one thing: work the top pursue — reply in-thread today and push it to Slack with an owner. I put the exact reply draft on each card.`
       : ` If you only do one thing: leave one helpful reply on the top nurture and let the monitors sit.`;
   return `${head}${body}${tail}`;
+}
+
+// Short spoken opener (~60 words): what she SAYS aloud. The full script above
+// stays on screen for reading. Never loses context: counts + top verdict +
+// the one action + an explicit offer to go deeper.
+export function buildSpokenSummary(analyzed: AnalyzedSignal[], preset: IcpPreset, live: boolean): string {
+  const n = analyzed.length;
+  if (!n) return `Nothing on your ${preset.name} watchlist right now. Try another watchlist, or run a sweep first.`;
+  const pursue = analyzed.filter((a) => a.verdict === "PURSUE");
+  const top = analyzed[0];
+  const who = preset.id === "home-services" ? "urgent homeowner requests" : preset.id === "ai-cost" ? "infrastructure signals" : "buyer signals";
+  const head =
+    `Morning. ${n} ${who} on your ${preset.name} watchlist${live ? "" : ", demo data"}. ` +
+    (pursue.length === n && n > 1
+      ? `I'd pursue all ${n} today. `
+      : pursue.length
+        ? `I'd pursue ${pursue.length} of ${n} today. `
+        : `Nothing I'd chase hard — one to nurture, rest to watch. `);
+  const topLine =
+    `Top one: ${top.title} Score ${top.score}, verdict ${top.verdict.toLowerCase()}. ` +
+    `${top.next_action} `;
+  const offer = `Say "tell me more on number one" for the full story, or "push number one" and I'll send it to Slack.`;
+  return `${head}${topLine}${offer}`;
 }

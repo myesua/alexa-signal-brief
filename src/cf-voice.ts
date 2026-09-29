@@ -9,6 +9,35 @@ const TOKEN = process.env.CLOUDFLARE_API_TOKEN ?? "";
 const NV_KEY = process.env.NVIDIA_API_KEY ?? "";
 const NV_MODEL = process.env.NVIDIA_TTS_MODEL ?? "nvidia/magpie-tts-multilingual";
 const NV_VOICE = process.env.NVIDIA_TTS_VOICE ?? "Magpie-Multilingual.EN-US.Aria";
+const FISH_KEY = process.env.FISH_API_KEY ?? "";
+const EL_KEY = process.env.ELEVENLABS_API_KEY ?? "";
+const EL_VOICE = process.env.ELEVENLABS_VOICE_ID ?? "21m00Tcm4TlvDq8ikWAM";
+
+// Fish Audio s2.1-pro-free: free, no hard cap, no card. Key from fish.audio dashboard.
+async function fishTTS(text: string): Promise<{ buf: Buffer; ctype: string }> {
+  const r = await fetch("https://api.fish.audio/v1/tts", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${FISH_KEY}`, "Content-Type": "application/json", model: "s2.1-pro-free" },
+    body: JSON.stringify({ text: text.slice(0, 1000), format: "mp3", normalize: true }),
+  });
+  if (!r.ok || !(r.headers.get("content-type") ?? "").includes("audio")) {
+    throw new Error(`Fish ${r.status}: ${(await r.text()).slice(0, 160)}`);
+  }
+  return { buf: Buffer.from(await r.arrayBuffer()), ctype: "audio/mpeg" };
+}
+
+// ElevenLabs free tier: 10k credits/mo, no card. Flash model stretches to ~20k chars/mo.
+async function elevenTTS(text: string): Promise<{ buf: Buffer; ctype: string }> {
+  const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${EL_VOICE}`, {
+    method: "POST",
+    headers: { "xi-api-key": EL_KEY, "Content-Type": "application/json", Accept: "audio/mpeg" },
+    body: JSON.stringify({ text: text.slice(0, 1000), model_id: "eleven_flash_v2_5" }),
+  });
+  if (!r.ok || !(r.headers.get("content-type") ?? "").includes("audio")) {
+    throw new Error(`ElevenLabs ${r.status}: ${(await r.text()).slice(0, 160)}`);
+  }
+  return { buf: Buffer.from(await r.arrayBuffer()), ctype: "audio/mpeg" };
+}
 
 // NVIDIA NIM hosted TTS (OpenAI-compatible): POST /v1/audio/speech -> audio bytes.
 // Free trial tier, no card; rate-limited per model. Throws on any non-2xx.
@@ -48,9 +77,11 @@ export function createSpeechRouter() {
   router.get("/api/speech-health", (_req, res) =>
     res.json({
       ok: true,
+      fish: Boolean(FISH_KEY),
+      elevenlabs: Boolean(EL_KEY),
       nvidia: Boolean(NV_KEY),
       cloudflare: Boolean(ACCOUNT && TOKEN),
-      chain: ["nvidia-nim", "@cf/deepgram/aura-1", "@cf/myshell-ai/melotts"],
+      chain: ["fish:s2.1-pro-free", "elevenlabs:flash", "nvidia-nim", "@cf/deepgram/aura-1", "@cf/myshell-ai/melotts"],
     })
   );
 
@@ -81,8 +112,30 @@ export function createSpeechRouter() {
     if (!text) return res.status(400).json({ error: "text required" });
     if (text.length > 4000) return res.status(400).json({ error: "max 4000 chars — split the brief" });
     const errors: string[] = [];
+    const send = (buf: Buffer, ctype: string, label: string) => {
+      res.setHeader("Content-Type", ctype);
+      res.setHeader("X-Voice-Model", label);
+      return res.send(buf);
+    };
 
-    // 1) NVIDIA NIM free trial (skipped without key)
+    // 1) Fish Audio (free, no hard cap) 2) ElevenLabs free tier
+    if (FISH_KEY) {
+      try {
+        const out = await fishTTS(text);
+        return send(out.buf, out.ctype, "fish:s2.1-pro-free");
+      } catch (e) {
+        errors.push((e as Error).message);
+      }
+    }
+    if (EL_KEY) {
+      try {
+        const out = await elevenTTS(text);
+        return send(out.buf, out.ctype, "elevenlabs:flash");
+      } catch (e) {
+        errors.push((e as Error).message);
+      }
+    }
+    // 3) NVIDIA NIM free trial (skipped without key; currently no TTS on trial keys)
     if (NV_KEY) {
       try {
         const out = await nvidiaTTS(text);
@@ -93,7 +146,7 @@ export function createSpeechRouter() {
         errors.push((e as Error).message);
       }
     }
-    // 2) Cloudflare Aura-1, 3) MeloTTS (skipped without credentials)
+    // 4) Cloudflare Aura-1, 5) MeloTTS (skipped without credentials)
     if (ACCOUNT && TOKEN) {
       for (const m of req.body?.model === "melotts" ? ["melotts"] : ["aura-1", "melotts"]) {
         try {
@@ -106,9 +159,9 @@ export function createSpeechRouter() {
         }
       }
     }
-    if (!NV_KEY && !(ACCOUNT && TOKEN)) {
+    if (!FISH_KEY && !EL_KEY && !NV_KEY && !(ACCOUNT && TOKEN)) {
       return res.status(501).json({
-        error: "No voice provider configured. Set NVIDIA_API_KEY or CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN in .env, or deploy worker/speech.ts.",
+        error: "No voice provider configured. Set FISH_API_KEY or ELEVENLABS_API_KEY in .env, or deploy worker/speech.ts.",
       });
     }
     return res.status(502).json({ error: `All voice providers failed: ${errors.join(" | ").slice(0, 400)}` });

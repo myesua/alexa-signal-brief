@@ -9,6 +9,32 @@ interface Env {
   NVIDIA_API_KEY?: string;
   NVIDIA_TTS_MODEL?: string;
   NVIDIA_TTS_VOICE?: string;
+  FISH_API_KEY?: string;
+  ELEVENLABS_API_KEY?: string;
+  ELEVENLABS_VOICE_ID?: string;
+}
+
+// Free, no-card providers first (both bypass CF neuron quota):
+// 1) Fish Audio s2.1-pro-free — no hard cap. 2) ElevenLabs free 10k credits/mo.
+async function fishTTS(text: string, key: string): Promise<Response> {
+  return fetch("https://api.fish.audio/v1/tts", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", model: "s2.1-pro-free" },
+    body: JSON.stringify({ text: text.slice(0, 1000), format: "mp3", normalize: true }),
+  });
+}
+async function elevenTTS(text: string, key: string, voiceId: string): Promise<Response> {
+  return fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+    method: "POST",
+    headers: { "xi-api-key": key, "Content-Type": "application/json", Accept: "audio/mpeg" },
+    body: JSON.stringify({ text: text.slice(0, 1000), model_id: "eleven_flash_v2_5" }),
+  });
+}
+function audioOrThrow(r: Response, label: string): Promise<Response> {
+  if (r.ok && (r.headers.get("content-type") ?? "").includes("audio")) return Promise.resolve(r);
+  return r.text().then((t) => {
+    throw new Error(`${label} ${r.status}: ${t.slice(0, 160)}`);
+  });
 }
 
 const MAX_CHARS = 1500;
@@ -25,7 +51,7 @@ export default {
 
     if (url.pathname === "/api/speech-health" && request.method === "GET") {
       return Response.json(
-        { ok: true, nvidia: Boolean(env.NVIDIA_API_KEY), models: ["nvidia-nim", "@cf/deepgram/aura-1", "@cf/myshell-ai/melotts", "@cf/openai/whisper"] },
+        { ok: true, fish: Boolean(env.FISH_API_KEY), elevenlabs: Boolean(env.ELEVENLABS_API_KEY), nvidia: Boolean(env.NVIDIA_API_KEY), models: ["fish:s2.1-pro-free", "elevenlabs:flash", "nvidia-nim", "@cf/deepgram/aura-1", "@cf/myshell-ai/melotts", "@cf/openai/whisper"] },
         { headers: CORS }
       );
     }
@@ -67,7 +93,29 @@ export default {
 
     const want = body.model === "melotts" ? "melotts" : "auto";
     const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n) : s);
-    // 1) NVIDIA NIM free trial first (skipped without secret) — bypasses CF neuron quota
+    const failures: string[] = [];
+    const passthrough = (r: Response, label: string) =>
+      new Response(r.body, {
+        headers: { ...CORS, "Content-Type": r.headers.get("content-type") ?? "audio/mpeg", "X-Voice-Model": label },
+      });
+    // 1) Fish Audio s2.1-pro-free (free, no hard cap) 2) ElevenLabs free tier
+    if (want === "auto" && env.FISH_API_KEY) {
+      try {
+        return passthrough(await audioOrThrow(await fishTTS(text, env.FISH_API_KEY), "fish"), "fish:s2.1-pro-free");
+      } catch (e) {
+        failures.push(String((e as Error)?.message ?? e).slice(0, 160));
+      }
+    }
+    if (want === "auto" && env.ELEVENLABS_API_KEY) {
+      try {
+        return passthrough(
+          await audioOrThrow(await elevenTTS(text, env.ELEVENLABS_API_KEY, env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM"), "elevenlabs"),
+          "elevenlabs:flash"
+        );
+      } catch (e) {
+        failures.push(String((e as Error)?.message ?? e).slice(0, 160));
+      }
+    }
     if (want === "auto" && env.NVIDIA_API_KEY) {
       try {
         const r = await fetch("https://integrate.api.nvidia.com/v1/audio/speech", {
@@ -84,12 +132,12 @@ export default {
             response_format: "mp3",
           }),
         });
-        if (r.ok) {
+        if (r.ok && (r.headers.get("content-type") ?? "").includes("audio")) {
           return new Response(r.body, {
             headers: { ...CORS, "Content-Type": r.headers.get("content-type") ?? "audio/mpeg", "X-Voice-Model": "nvidia-nim" },
           });
         }
-        console.warn("nvidia tts non-2xx, falling back:", r.status);
+        failures.push(`nvidia ${r.status}: ${(await r.text().catch(() => "")).slice(0, 160)}`);
       } catch (e) {
         console.warn("nvidia tts failed, falling back:", (e as Error).message);
       }
@@ -113,7 +161,7 @@ export default {
         });
       }
     } catch (e) {
-      console.warn("aura-1 failed, falling back to melotts:", (e as Error).message);
+      failures.push(`aura-1: ${String((e as Error)?.message ?? e).slice(0, 160)}`);
     }
     // Fallback: MeloTTS returns JSON { audio: base64 } — decode to bytes
     try {
@@ -129,8 +177,9 @@ export default {
       }
       throw new Error((melo as any)?.error ?? (melo as any)?.detail ?? "melotts returned no audio");
     } catch (e) {
+      failures.push(`melotts: ${String((e as Error)?.message ?? e).slice(0, 160)}`);
       return Response.json(
-        { error: "all voice providers failed", detail: String((e as Error)?.message ?? e).slice(0, 300) },
+        { error: "all voice providers failed", detail: failures.join(" | ").slice(0, 500) },
         { status: 502, headers: CORS }
       );
     }

@@ -6,6 +6,9 @@
 
 interface Env {
   AI: { run(model: string, input: Record<string, unknown>, opts?: Record<string, unknown>): Promise<Response> };
+  NVIDIA_API_KEY?: string;
+  NVIDIA_TTS_MODEL?: string;
+  NVIDIA_TTS_VOICE?: string;
 }
 
 const MAX_CHARS = 1500;
@@ -22,7 +25,7 @@ export default {
 
     if (url.pathname === "/api/speech-health" && request.method === "GET") {
       return Response.json(
-        { ok: true, models: ["@cf/deepgram/aura-1", "@cf/myshell-ai/melotts", "@cf/openai/whisper"] },
+        { ok: true, nvidia: Boolean(env.NVIDIA_API_KEY), models: ["nvidia-nim", "@cf/deepgram/aura-1", "@cf/myshell-ai/melotts", "@cf/openai/whisper"] },
         { headers: CORS }
       );
     }
@@ -62,17 +65,49 @@ export default {
     if (!text) return Response.json({ error: "text required" }, { status: 400, headers: CORS });
     if (text.length > 4000) return Response.json({ error: "max 4000 chars per call — split the brief" }, { status: 400, headers: CORS });
 
-    const want = body.model === "melotts" ? "melotts" : "aura-1";
-    // Aura-1: cap to protect daily free neurons; client should send opener + top-1 for voice, full script stays in transcript
+    const want = body.model === "melotts" ? "melotts" : "auto";
     const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n) : s);
+    // 1) NVIDIA NIM free trial first (skipped without secret) — bypasses CF neuron quota
+    if (want === "auto" && env.NVIDIA_API_KEY) {
+      try {
+        const r = await fetch("https://integrate.api.nvidia.com/v1/audio/speech", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${env.NVIDIA_API_KEY}`,
+            "Content-Type": "application/json",
+            Accept: "audio/mpeg",
+          },
+          body: JSON.stringify({
+            model: env.NVIDIA_TTS_MODEL || "nvidia/magpie-tts-multilingual",
+            input: clip(text, 1000),
+            voice: env.NVIDIA_TTS_VOICE || "Magpie-Multilingual.EN-US.Aria",
+            response_format: "mp3",
+          }),
+        });
+        if (r.ok) {
+          return new Response(r.body, {
+            headers: { ...CORS, "Content-Type": r.headers.get("content-type") ?? "audio/mpeg", "X-Voice-Model": "nvidia-nim" },
+          });
+        }
+        console.warn("nvidia tts non-2xx, falling back:", r.status);
+      } catch (e) {
+        console.warn("nvidia tts failed, falling back:", (e as Error).message);
+      }
+    }
 
     try {
-      if (want === "aura-1") {
+      if (want !== "melotts") {
         const resp = await env.AI.run(
           "@cf/deepgram/aura-1",
           { text: clip(text, MAX_CHARS), speaker: body.speaker ?? "athena" },
           { returnRawResponse: true }
         );
+        const ct = resp.headers.get("content-type") ?? "";
+        if (!resp.ok || ct.includes("application/json")) {
+          // Quota/model errors come back as JSON — fall through, don't serve as audio
+          const t = await resp.text().catch(() => "");
+          throw new Error(`aura-1 ${resp.status}: ${t.slice(0, 200)}`);
+        }
         return new Response(resp.body, {
           headers: { ...CORS, "Content-Type": "audio/mpeg", "X-Voice-Model": "aura-1" },
         });
@@ -81,16 +116,23 @@ export default {
       console.warn("aura-1 failed, falling back to melotts:", (e as Error).message);
     }
     // Fallback: MeloTTS returns JSON { audio: base64 } — decode to bytes
-    const melo = (await env.AI.run("@cf/myshell-ai/melotts", {
-      prompt: clip(text, MAX_CHARS),
-      lang: "en",
-    })) as unknown as { audio?: string };
-    if (melo?.audio) {
-      const bin = Uint8Array.from(atob(melo.audio), (c) => c.charCodeAt(0));
-      return new Response(bin.buffer as ArrayBuffer, {
-        headers: { ...CORS, "Content-Type": "audio/wav", "X-Voice-Model": "melotts" },
-      });
+    try {
+      const melo = (await env.AI.run("@cf/myshell-ai/melotts", {
+        prompt: clip(text, MAX_CHARS),
+        lang: "en",
+      })) as unknown as { audio?: string; error?: string };
+      if (melo?.audio) {
+        const bin = Uint8Array.from(atob(melo.audio), (c) => c.charCodeAt(0));
+        return new Response(bin.buffer as ArrayBuffer, {
+          headers: { ...CORS, "Content-Type": "audio/wav", "X-Voice-Model": "melotts" },
+        });
+      }
+      throw new Error((melo as any)?.error ?? (melo as any)?.detail ?? "melotts returned no audio");
+    } catch (e) {
+      return Response.json(
+        { error: "all voice providers failed", detail: String((e as Error)?.message ?? e).slice(0, 300) },
+        { status: 502, headers: CORS }
+      );
     }
-    return Response.json({ error: "melotts returned no audio" }, { status: 502, headers: CORS });
   },
 } satisfies ExportedHandler<Env>;

@@ -51,12 +51,12 @@ export default {
     // Fish ASR first (same free key), CF Whisper fallback. try/catch keeps CORS
     // headers on every path so the browser never reports a misleading CORS error.
     if (url.pathname === "/api/transcribe" && request.method === "POST") {
+      let fishErr = "";
       try {
         const ctype = request.headers.get("content-type") ?? "";
         const buf = await request.arrayBuffer();
         if (!buf.byteLength) return Response.json({ error: "empty audio" }, { status: 400, headers: CORS });
         if (buf.byteLength > 8 * 1024 * 1024) return Response.json({ error: "max 8MB per clip" }, { status: 400, headers: CORS });
-        let fishErr = "";
         if (env.FISH_API_KEY) {
           try {
             const form = new FormData();

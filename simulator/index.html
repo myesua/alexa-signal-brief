@@ -136,6 +136,15 @@ input[type=password]{font-family:inherit}
       <div class="transcript" id="transcript">Idle.</div>
       <div class="bubbles" id="bubbles"></div>
       <div class="rail" id="rail"></div>
+      <details id="dbgBox" style="max-width:760px;margin:10px auto 0;border:1px solid var(--line);border-radius:12px;background:#fbf9f3;padding:8px 12px">
+        <summary style="cursor:pointer;font-size:12px;font-weight:700">Voice debug log <span style="color:var(--mut);font-weight:400">— mic, transcript, intent, voice (for pre-video diagnosis)</span></summary>
+        <div style="display:flex;gap:6px;margin:8px 0">
+          <button class="btn" id="copyLog" style="font-size:11px;padding:6px 10px">Copy log</button>
+          <button class="btn" id="dlLog" style="font-size:11px;padding:6px 10px">Download</button>
+          <button class="btn" id="clearLog" style="font-size:11px;padding:6px 10px">Clear</button>
+        </div>
+        <div id="vlog" style="font-family:ui-monospace,Menlo,monospace;font-size:11px;line-height:1.5;max-height:220px;overflow:auto;white-space:pre-wrap"></div>
+      </details>
     </div>
 
     <div class="panel">
@@ -193,9 +202,12 @@ async function speakCf(text, opts={}){
   // Resolve endpoint: explicit worker URL > same-origin /api/speech (Express proxy or Pages Function)
   const base = (S.cfUrl||'').replace(/\/$/,'');
   const url = base ? base + '/api/speech' : '/api/speech';
+  const t0 = performance.now();
+  vlog('tts:req', 'Cloudflare voice request', { chars: text.slice(0,1500).length, model: opts.model||'aura-1', url });
   const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text: text.slice(0,1500), model: opts.model||'aura-1' }) });
-  if(!r.ok){ const t = await r.text().catch(()=> ''); throw new Error(`CF voice ${r.status}: ${t.slice(0,120)}`); }
+  if(!r.ok){ const t = await r.text().catch(()=> ''); vlog('tts:err', 'Cloudflare voice failed', { status: r.status, body: t.slice(0,120), ms: Math.round(performance.now()-t0) }); throw new Error(`CF voice ${r.status}: ${t.slice(0,120)}`); }
   const buf = await r.arrayBuffer();
+  vlog('tts:ok', 'Cloudflare audio received', { bytes: buf.byteLength, model: r.headers.get('x-voice-model'), ms: Math.round(performance.now()-t0) });
   const blob = new Blob([buf], { type:'audio/mpeg' });
   return new Promise((resolve, reject)=>{
     const a = new Audio(URL.createObjectURL(blob));
@@ -207,10 +219,11 @@ async function speakCf(text, opts={}){
 }
 async function speak(text){
   stopAll();
-  if(!S.voice) return;
+  if(!S.voice) { vlog('tts:skip', 'voice off, transcript only', { chars: text.length }); return; }
+  vlog('tts:start', 'speak()', { engine: S.engine, chars: text.length });
   if(S.engine==='cloudflare'){
     try{ await speakCf(text); return; }
-    catch(e){ toast('CF voice failed — browser fallback'); }
+    catch(e){ vlog('tts:fallback', 'falling back to browser voice', { err: String(e).slice(0,120) }); toast('Human voice failed — basic voice instead'); }
   }
   try{ speakBrowser(text); }catch{}
 }
@@ -305,6 +318,30 @@ $('sweep').onclick=async()=>{
   const j=await r.json(); $('sweepOut').textContent=`queued ${j.queued} (${j.live?'live':'demo'})`;
 };
 
+/* ---- Voice debug trace (pre-video diagnosis) ---- */
+const VLOG = [];
+function vlog(kind, msg, data){
+  const t = new Date();
+  const entry = { at: t.toISOString(), kind, msg, ...(data !== undefined ? { data } : {}) };
+  VLOG.push(entry);
+  try { console.log('[voice:' + kind + ']', msg, data ?? ''); } catch {}
+  const el = $('vlog');
+  if (el) {
+    const line = document.createElement('div');
+    line.textContent = t.toLocaleTimeString() + ' [' + kind + '] ' + msg + (data !== undefined ? ' ' + JSON.stringify(data) : '');
+    el.appendChild(line);
+    el.scrollTop = el.scrollHeight;
+  }
+}
+$('copyLog').onclick = () => { navigator.clipboard.writeText(JSON.stringify(VLOG, null, 2)).then(()=>toast('Log copied — paste it here for diagnosis')); };
+$('dlLog').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(VLOG, null, 2)], { type:'application/json' }));
+  a.download = 'voice-debug-' + Date.now() + '.json'; a.click();
+};
+$('clearLog').onclick = () => { VLOG.length = 0; $('vlog').innerHTML = ''; };
+vlog('boot', 'page loaded', { ua: navigator.userAgent.slice(0,120), https: location.protocol === 'https:' || location.hostname === 'localhost', sr: ('webkitSpeechRecognition' in window) || ('SpeechRecognition' in window), engine: S.engine });
+
 /* ---- Voice AI loop: you talk -> she understands -> answers -> speaks ---- */
 S.convo = false;
 S.lastVoice = '';
@@ -347,7 +384,9 @@ function parseCommand(raw){
 async function handleVoiceCommand(raw){
   const bubbles = $('bubbles');
   bubbles.innerHTML += `<div class="bubble you">${raw}</div>`;
+  vlog('heard', 'user utterance', { raw });
   const cmd = parseCommand(raw);
+  vlog('intent', 'parsed command', { normalized: normalizeHeard(raw), ...cmd });
   const cards = Object.values(window._cards || {});
   if (cmd.intent === 'stop') { stopAll(); listenNote(''); typewrite($('transcript'), 'Paused. Tap Talk whenever you are ready.'); if (S.convo) return; return; }
   if (cmd.intent === 'repeat') {
@@ -409,15 +448,18 @@ function startBrowserListen(){
   rec.onresult = e => {
     // Check every alternative — the top guess often mangles "brief" as "beef"
     const alts = [];
-    for (let i = 0; i < e.results[0].length; i++) alts.push(e.results[0][i].transcript);
-    const heard = alts[0];
-    const best = alts.find(t => parseCommand(t).intent !== 'help') || heard;
+    for (let i = 0; i < e.results[0].length; i++) alts.push({ text: e.results[0][i].transcript, conf: Math.round((e.results[0][i].confidence || 0) * 100) / 100 });
+    vlog('stt:result', 'browser alternatives', alts);
+    const heard = alts[0].text;
+    const pick = alts.find(t => parseCommand(t.text).intent !== 'help') || alts[0];
+    if (pick.text !== heard) vlog('stt:pick', 'top guess unusable, using alternative', { heard, best: pick.text });
     recActive = false; try { rec.stop(); } catch {}
-    $('talkBtn').textContent = '🎤 Tap to talk'; listenNote('Heard: “' + best + '” — thinking…');
-    handleVoiceCommand(best);
+    $('talkBtn').textContent = '🎤 Tap to talk'; listenNote('Heard: “' + pick.text + '” — thinking…');
+    handleVoiceCommand(pick.text);
   };
   rec.onerror = e => {
     recActive = false; $('talkBtn').textContent = '🎤 Tap to talk';
+    vlog('stt:error', 'browser recognition error', { error: e.error, message: e.message || '' });
     if (e.error === 'network') {
       // Browser voice typing needs Google's servers (https + network).
       // Fall back to recording -> Cloudflare transcription automatically.
@@ -440,14 +482,17 @@ async function startRecorderListen(){
       stream.getTracks().forEach(t=>t.stop());
       $('talkBtn').textContent = '🎤 Tap to talk'; listenNote('Turning your words into text…');
       const blob = new Blob(mediaChunks, { type:'audio/webm' });
+      vlog('stt:rec', 'recorded clip', { bytes: blob.size, type: blob.type });
       try {
         const base = (S.cfUrl||'').replace(/\/$/,'');
         const url = base ? base + '/api/transcribe' : '/api/transcribe';
+        const t0 = performance.now();
         const r = await fetch(url, { method:'POST', headers:{'Content-Type':'audio/webm'}, body: blob });
         const j = await r.json();
+        vlog('stt:whisper', 'transcription result', { text: j.text || '', ms: Math.round(performance.now()-t0) });
         if (j.text) { listenNote('Heard: “' + j.text + '”'); handleVoiceCommand(j.text); }
         else listenNote('Did not catch that — try again.');
-      } catch(e){ listenNote('Transcribe failed — is the voice worker deployed?'); }
+      } catch(e){ vlog('stt:err', 'transcribe failed', { err: String(e).slice(0,120) }); listenNote('Transcribe failed — is the voice worker deployed?'); }
     };
     mediaRec.start();
     $('talkBtn').textContent = '⏹ Stop recording';
@@ -479,8 +524,10 @@ async function ask(heard){
   bubbles.innerHTML+=`<div class="bubble you">${heard || "Alexa, what's my signal brief?"}</div>`;
   $('hint').textContent='Listening… contacting Sygnal…';
   $('orb').classList.add('speaking'); $('wave').classList.add('on');
+  const t0 = performance.now();
   const r=await fetch('/api/brief',{method:'POST',headers:H(),body:JSON.stringify({limit:5,preset:S.preset})});
   const j=await r.json();
+  vlog('brief', 'brief fetched', { preset: S.preset, live: j.live, pursue: j.pursue_count, cards: (j.cards||[]).length, ms: Math.round(performance.now()-t0) });
   // client-side source toggle filter
   const cards=(j.cards||[]).filter(c=>true);
   typewrite($('transcript'), j.voice); // full story stays on screen

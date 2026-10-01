@@ -4,12 +4,18 @@
 // Deployed worker/speech.ts (AI binding) remains the Cloudflare-native path.
 import express from "express";
 
-const ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID ?? "";
-const TOKEN = process.env.CLOUDFLARE_API_TOKEN ?? "";
-const NV_KEY = process.env.NVIDIA_API_KEY ?? "";
-const NV_MODEL = process.env.NVIDIA_TTS_MODEL ?? "nvidia/magpie-tts-multilingual";
-const NV_VOICE = process.env.NVIDIA_TTS_VOICE ?? "Magpie-Multilingual.EN-US.Aria";
-const FISH_KEY = process.env.FISH_API_KEY ?? "";
+const raw = (k: string) => process.env[k] ?? "";
+const clean = (v: string) => {
+  const s = v.trim();
+  if (!s || /^put_/i.test(s) || /without_committing/i.test(s)) return "";
+  return s;
+};
+const ACCOUNT = clean(raw("CLOUDFLARE_ACCOUNT_ID"));
+const TOKEN = clean(raw("CLOUDFLARE_API_TOKEN"));
+const NV_KEY = clean(raw("NVIDIA_API_KEY"));
+const NV_MODEL = raw("NVIDIA_TTS_MODEL") || "nvidia/magpie-tts-multilingual";
+const NV_VOICE = raw("NVIDIA_TTS_VOICE") || "Magpie-Multilingual.EN-US.Aria";
+const FISH_KEY = clean(raw("FISH_API_KEY"));
 
 // Fish Audio s2.1-pro-free: free, no hard cap, no card. Key from fish.audio dashboard.
 async function fishTTS(text: string): Promise<{ buf: Buffer; ctype: string }> {

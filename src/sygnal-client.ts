@@ -10,8 +10,17 @@ const MCP_URL = process.env.SYGNAL_MCP_URL ?? "https://api.trysygnal.com/mcp";
 const ENV_KEY = process.env.SYGNAL_API_KEY ?? "";
 const MOCK_DEFAULT = (process.env.MOCK_SIGNALS ?? "true").toLowerCase() !== "false";
 
+// Placeholders from .env.example must never count as a key — otherwise every
+// call pointlessly attempts live first (and logs scary fetch warnings).
+export function cleanKey(v?: string) {
+  const s = (v ?? "").trim();
+  if (!s) return "";
+  if (/^put_/i.test(s) || /without_committing/i.test(s) || /^(test|xxx|changeme)/i.test(s)) return "";
+  return s;
+}
+
 export function resolveKey(reqKey?: string) {
-  return (reqKey ?? "").trim() || ENV_KEY;
+  return cleanKey(reqKey) || cleanKey(ENV_KEY);
 }
 
 async function mcpToolsCall(

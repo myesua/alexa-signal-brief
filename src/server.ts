@@ -119,6 +119,30 @@ app.post('/api/webhook', async (req, res) => {
   });
 });
 
+// Open conversation: ANY natural question about today's signals.
+// LLM first (NVIDIA hosted trial), 501 when unconfigured so the client
+// falls back to its built-in intent parser (fully offline-capable).
+app.post('/api/ask', async (req, res) => {
+  const message = String(req.body?.message ?? '').trim();
+  if (!message) return res.status(400).json({ error: 'message required' });
+  const presetId = String(req.body?.preset ?? 'home-services');
+  const preset = PRESETS.find((p) => p.id === presetId) ?? PRESETS[0];
+  const history = Array.isArray(req.body?.history) ? req.body.history.slice(-6) : [];
+  try {
+    const { listSignalsRanked } = await import('./sygnal-client.js');
+    const { analyzeSignals } = await import('./intelligence.js');
+    const { answerQuestion } = await import('./brain.js');
+    const { signals, live } = await listSignalsRanked(5, reqKey(req), preset.id);
+    const analyzed = analyzeSignals(signals, preset);
+    const ans = await answerQuestion(message, preset, analyzed, history);
+    res.json({ ...ans, live, preset: preset.id });
+  } catch (e) {
+    const msg = String((e as Error)?.message ?? e);
+    if (/no LLM key/i.test(msg)) return res.status(501).json({ error: 'no LLM configured — use built-in intents' });
+    return res.status(502).json({ error: `brain failed: ${msg.slice(0, 200)}` });
+  }
+});
+
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
 app.listen(PORT, () => console.log(`alexa-signal-brief on :${PORT}`));

@@ -178,7 +178,7 @@ input[type=password]{font-family:inherit}
 
 <script>
 const $ = id => document.getElementById(id);
-const S = { preset: localStorage.getItem('sb_preset')||'gtm-switchers', presets:[], key: sessionStorage.getItem('sb_key')||'', voice:true, engine: localStorage.getItem('sb_engine')||'browser', cfUrl: localStorage.getItem('sb_cfurl')||'https://alexa-signal-voice.mayorjoshua51.workers.dev', enabled:{} };
+const S = { preset: localStorage.getItem('sb_preset')||'home-services', presets:[], key: sessionStorage.getItem('sb_key')||'', voice:true, engine: localStorage.getItem('sb_engine')||'browser', cfUrl: localStorage.getItem('sb_cfurl')||'https://alexa-signal-voice.mayorjoshua51.workers.dev', enabled:{}, hist: [] };
 const H = () => ({'Content-Type':'application/json', ...(S.key?{'x-sygnal-key':S.key}:{})});
 const toast = m => { const t=$('toast'); t.textContent=m; t.style.display='block'; setTimeout(()=>t.style.display='none',2600); };
 /* Quota errors are never hidden — on a spent allocation we toast the native
@@ -393,6 +393,40 @@ async function handleVoiceCommand(raw){
   const bubbles = $('bubbles');
   bubbles.innerHTML += `<div class="bubble you">${raw}</div>`;
   vlog('heard', 'user utterance', { raw });
+  // 1) Conversational brain (worker LLM): handles ANY natural phrasing.
+  // Cards already on screen become the context. 30s cap, then built-in intents.
+  try {
+    listenNote('Thinking…');
+    const t0 = performance.now();
+    let cards = Object.values(window._cards || {});
+    if (!cards.length || (window._cardsPreset && window._cardsPreset !== S.preset)) {
+      vlog('brain', 'no fresh cards, silent brief first', { preset: S.preset });
+      await silentBrief();
+      cards = Object.values(window._cards || {});
+    }
+    const base = (S.cfUrl||'').replace(/\/$/,'');
+    const askUrl = base ? base + '/api/ask' : '/api/ask';
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 30000);
+    const r = await fetch(askUrl, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+      message: raw,
+      preset: S.presets.find(x=>x.id===S.preset) || { id: S.preset },
+      signals: cards,
+      history: S.hist.slice(-6),
+    }), signal: ctl.signal }).finally(() => clearTimeout(timer));
+    if (r.ok) {
+      const j = await r.json();
+      vlog('brain', 'LLM answer', { via: j.via, spoken_len: (j.spoken||'').length, ms: Math.round(performance.now()-t0) });
+      bubbles.innerHTML += `<div class="bubble alexa">${j.full}</div>`;
+      typewrite($('transcript'), j.full);
+      S.lastVoice = j.spoken || j.full;
+      S.hist.push({ role:'user', text: raw }, { role:'assistant', text: j.full });
+      await speak(j.spoken || j.full);
+      return afterAnswer();
+    }
+    vlog('brain:fallback', 'LLM unavailable, built-in intents', { status: r.status });
+  } catch(e) { vlog('brain:fallback', 'LLM error/timeout, built-in intents', { err: String(e).slice(0,120) }); }
+  // 2) Built-in intents (offline fallback): brief / details / push / stop / repeat
   const cmd = parseCommand(raw);
   vlog('intent', 'parsed command', { normalized: normalizeHeard(raw), ...cmd });
   const cards = Object.values(window._cards || {});
@@ -540,22 +574,7 @@ $('typeBox').onkeydown = e => { if (e.key === 'Enter') $('sendBtn').click(); };
 document.querySelectorAll('[data-say]').forEach(b=>b.onclick=()=>handleVoiceCommand(b.dataset.say));
 
 /* brief = voice-first; heard = what the user actually said (voice loop) */
-async function ask(heard){
-  const bubbles=$('bubbles');
-  bubbles.innerHTML+=`<div class="bubble you">${heard || "Alexa, what's my signal brief?"}</div>`;
-  $('hint').textContent='Listening… contacting Sygnal…';
-  $('orb').classList.add('speaking'); $('wave').classList.add('on');
-  const t0 = performance.now();
-  const r=await fetch('/api/brief',{method:'POST',headers:H(),body:JSON.stringify({limit:5,preset:S.preset})});
-  const j=await r.json();
-  vlog('brief', 'brief fetched', { preset: S.preset, live: j.live, pursue: j.pursue_count, cards: (j.cards||[]).length, ms: Math.round(performance.now()-t0) });
-  // client-side source toggle filter
-  const cards=(j.cards||[]).filter(c=>true);
-  typewrite($('transcript'), j.voice); // full story stays on screen
-  S.lastVoice = j.spoken || j.voice;
-  speak(j.spoken || j.voice); // short summary aloud — details live on cards + "tell me more"
-  bubbles.innerHTML+=`<div class="bubble alexa">${j.voice}</div>`;
-  $('modePill').textContent=j.live?'LIVE':'DEMO DATA'; $('modePill').className='pill '+(j.live?'live':'demo');
+function renderCards(cards, pursue_count){
   $('rail').innerHTML=cards.map((c,i)=>{
   const v = c.verdict||'NURTURE';
   const vc = v==='PURSUE'?'var(--good)':v==='MONITOR'?'var(--mut)':'var(--warn)';
@@ -580,11 +599,39 @@ async function ask(heard){
       </div>
     </div>`;}).join('');
   window._cards=Object.fromEntries(cards.map(c=>[c.signal_id,c]));
-  const pc = j.pursue_count ?? cards.filter(c=>c.verdict==='PURSUE').length;
+  window._cardsPreset=S.preset;
+  const pc = pursue_count ?? cards.filter(c=>c.verdict==='PURSUE').length;
   $('hint').innerHTML=`<b>${pc} to pursue</b> out of ${cards.length} — she told you the short version aloud; the full story is on screen. Say or type <b>“tell me more on number 1”</b>, or <b>“push number 1”</b> to send it on. ${S.convo?'Keep listening is on — she keeps listening.':'Tap 🎤 Tap to talk to speak again.'}`;
+  if(!('speechSynthesis' in window) && S.engine==='browser') $('hint').innerHTML+=' (browser TTS unavailable — transcript above still counts for demo)';
+}
+// Quiet context load for the conversational brain: cards on screen, nothing spoken.
+async function silentBrief(){
+  const r=await fetch('/api/brief',{method:'POST',headers:H(),body:JSON.stringify({limit:5,preset:S.preset})});
+  const j=await r.json();
+  $('modePill').textContent=j.live?'LIVE':'DEMO DATA'; $('modePill').className='pill '+(j.live?'live':'demo');
+  renderCards(j.cards||[], j.pursue_count);
+  return j;
+}
+async function ask(heard){
+  const bubbles=$('bubbles');
+  bubbles.innerHTML+=`<div class="bubble you">${heard || "Alexa, what's my signal brief?"}</div>`;
+  $('hint').textContent='Listening… contacting Sygnal…';
+  $('orb').classList.add('speaking'); $('wave').classList.add('on');
+  const t0 = performance.now();
+  const r=await fetch('/api/brief',{method:'POST',headers:H(),body:JSON.stringify({limit:5,preset:S.preset})});
+  const j=await r.json();
+  vlog('brief', 'brief fetched', { preset: S.preset, live: j.live, pursue: j.pursue_count, cards: (j.cards||[]).length, ms: Math.round(performance.now()-t0) });
+  // client-side source toggle filter
+  const cards=(j.cards||[]).filter(c=>true);
+  typewrite($('transcript'), j.voice); // full story stays on screen
+  S.lastVoice = j.spoken || j.voice;
+  S.hist.push({ role:'user', text: heard || "what's my signal brief?" }, { role:'assistant', text: j.voice });
+  speak(j.spoken || j.voice); // short summary aloud — details live on cards + "tell me more"
+  bubbles.innerHTML+=`<div class="bubble alexa">${j.voice}</div>`;
+  $('modePill').textContent=j.live?'LIVE':'DEMO DATA'; $('modePill').className='pill '+(j.live?'live':'demo');
+  renderCards(cards, j.pursue_count);
   $('orb').classList.remove('speaking');
   if (S.convo && S.voice) setTimeout(()=>startListening(), 800);
-  if(!('speechSynthesis' in window) && S.engine==='browser') $('hint').innerHTML+=' (browser TTS unavailable — transcript above still counts for demo)';
 }
 async function pushCardSilent(id){
   const r=await fetch('/api/webhook',{method:'POST',headers:H(),body:JSON.stringify({signal_id:id,destination:'slack:#signals'})});

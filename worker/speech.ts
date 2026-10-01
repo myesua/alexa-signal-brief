@@ -90,6 +90,79 @@ export default {
       }
     }
 
+    // Open conversation: ANY natural question about today's signals.
+    // Frontend sends the already-fetched analyzed cards as context; llama answers.
+    // ~18 neurons/question on fp8-fast (~500/day free). 502 -> client regex fallback.
+    if (url.pathname === "/api/ask" && request.method === "POST") {
+      try {
+        const q = (await request.json()) as {
+          message?: string;
+          preset?: { id?: string; name?: string; product_description?: string; target_audience?: string; keywords?: string };
+          signals?: any[];
+          history?: { role?: string; text?: string }[];
+        };
+        const message = String(q.message ?? "").trim();
+        if (!message) return Response.json({ error: "message required" }, { status: 400, headers: CORS });
+        const sigs = Array.isArray(q.signals) ? q.signals.slice(0, 5) : [];
+        if (!sigs.length) return Response.json({ error: "no signals in context — fetch /api/brief first" }, { status: 400, headers: CORS });
+        const p = q.preset ?? {};
+        const sigBlock = sigs
+          .map(
+            (s: any, i: number) =>
+              `#${i + 1} [${s.signal_id}] score ${s.score} verdict ${s.verdict} intent ${s.intent_type}\n` +
+              `Title: ${s.title}\nSource: ${s.source} (${s.url})\nSaid: ${String(s.raw_text ?? "").slice(0, 300)}\n` +
+              `Why it matters: ${s.what_it_means ?? ""}\nNext: ${s.next_action ?? ""}\nOutreach: ${s.outreach ?? ""}`
+          )
+          .join("\n\n");
+        const hist = (Array.isArray(q.history) ? q.history : []).slice(-4);
+        const out = (await env.AI.run("@cf/meta/llama-3.1-8b-instruct-fp8-fast", {
+          messages: [
+            {
+              role: "system",
+              content:
+                `You are Alexa Signal Brief, a senior GTM analyst reporting by voice. Warm, direct, concrete. Never say you are AI.\n` +
+                `BUSINESS: ${p.product_description ?? ""}\nAudience: ${p.target_audience ?? ""}\n\n` +
+                `TODAY'S SIGNALS:\n${sigBlock}\n\n` +
+                `Cite signal numbers, scores, exact quotes. Verdicts as PURSUE/NURTURE/MONITOR with reasons tied to their business. ` +
+                `For "how do I reach them" give the thread link plus a ready reply. ` +
+                `"spoken" <= 60 words, conversational, ends with an offer. "full" is complete markdown with bold verdicts and plain URLs.\n` +
+                `Reply ONLY with valid JSON: {"spoken": "...", "full": "..."}`,
+            },
+            ...hist.map((t) => ({ role: t.role === "assistant" ? "assistant" : "user", content: String(t.text ?? "").slice(0, 800) })),
+            { role: "user", content: message.slice(0, 800) },
+          ],
+          temperature: 0.4,
+          max_tokens: 600,
+        })) as any;
+        const respText =
+          typeof out?.response === "string"
+            ? out.response
+            : typeof out?.choices?.[0]?.message?.content === "string"
+              ? out.choices[0].message.content
+              : typeof out === "string"
+                ? out
+                : "";
+        if (!respText.trim()) throw new Error("empty completion: " + JSON.stringify(out).slice(0, 200));
+        const raw = respText;
+        let spoken = "", full = raw.trim();
+        try {
+          const parsed = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
+          full = String(parsed.full ?? parsed.answer ?? raw).trim();
+          spoken = String(parsed.spoken ?? "").trim();
+        } catch { /* use raw */ }
+        if (!spoken) {
+          const words = full.replace(/[#*`>\-]/g, "").split(/\s+/);
+          spoken = (words.length <= 60 ? full : words.slice(0, 60).join(" ") + "…").replace(/[#*`>\-]/g, "");
+        }
+        return Response.json({ spoken, full, via: "cf-llama" }, { headers: CORS });
+      } catch (e) {
+        return Response.json(
+          { error: "ask failed", detail: String((e as Error)?.message ?? e).slice(0, 300) },
+          { status: 502, headers: CORS }
+        );
+      }
+    }
+
     if (url.pathname !== "/api/speech" || request.method !== "POST") {
       return Response.json({ error: "POST /api/speech with {text}" }, { status: 404, headers: CORS });
     }
